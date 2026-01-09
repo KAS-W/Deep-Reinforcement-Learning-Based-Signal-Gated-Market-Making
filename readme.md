@@ -15,9 +15,9 @@ High-frequency Trade and Quote (TAQ) and daily data for the S&P 500 constituents
 
 **Strategy Pipeline**
 
+To be implemented
+
 ## Replication Timeline
-$$
-\begin{array}{|c|c|c|c|c|c|c|}
 | Weeks | Lit. Review | Feature Eng. | Vec Backtest | Metric Bldg. | Robustness | OOS Testing |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Week 1 | ✓ | ✓ | | | | |
