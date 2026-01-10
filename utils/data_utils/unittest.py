@@ -1,7 +1,7 @@
-from tusharesql import DailyQueryTool
+from tusharesql import DailyQueryTool, AShareQueryTool
 
 tool = DailyQueryTool()
-
+ashare = AShareQueryTool()
 
 def test_calendar(start_date, end_date):
     cal_df = tool.us_trade_cal(start_date=start_date, end_date=end_date)
@@ -62,10 +62,35 @@ def test_adj_daily(start_date, end_date):
     return True
 
 
+# tushare daily() api has been verifed previously
+# so here I only test the minute data api
+# Tushare does not support cross-sectional snapshot for the minute level data
+# for loops on trade_date and ts_code are required
+def test_a_share_minute(start_date, end_date):
+    ashare_minute = ashare.stk_mins(ts_code='510300.SH', start_date=start_date, end_date=end_date, freq='5min')
+    
+    # if dataframe is empty
+    assert not ashare_minute.empty, f"Error: DataFrame is empty for dates {start_date} to {end_date}"
+
+    expected_columns = ['close', 'open', 'high', 'low', 'vol', 'amount']
+    for col in expected_columns:
+        assert col in ashare_minute.columns, f"Error: Missing expected column '{col}'"
+
+    print(f"Test Passed: Daily adj data is valid with {len(ashare_minute)} rows.")
+    print(ashare_minute.columns)
+    print(ashare_minute.head(10))
+    return True
+
+
 if __name__ == '__main__':
     start_date = '20250101'
     end_date = '20250201'
-    test_calendar(start_date, end_date)
-    test_daily(start_date, end_date)
-    test_adjfactor(start_date, end_date)
-    test_adj_daily(start_date, end_date)
+
+    # us data test
+    # test_calendar(start_date, end_date)
+    # test_daily(start_date, end_date)
+    # test_adjfactor(start_date, end_date)
+    # test_adj_daily(start_date, end_date)
+
+    # a-share minute data test
+    test_a_share_minute(start_date, end_date)
