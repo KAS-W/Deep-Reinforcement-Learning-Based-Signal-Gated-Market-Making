@@ -217,3 +217,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# confidential~
+**tusharesql.py
+**__init__.py
