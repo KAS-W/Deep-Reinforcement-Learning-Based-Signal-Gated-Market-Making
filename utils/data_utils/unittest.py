@@ -67,7 +67,7 @@ def test_adj_daily(start_date, end_date):
 # Tushare does not support cross-sectional snapshot for the minute level data
 # for loops on trade_date and ts_code are required
 def test_a_share_minute(start_date, end_date):
-    ashare_minute = ashare.stk_mins(ts_code='510300.SH', start_date=start_date, end_date=end_date, freq='5min')
+    ashare_minute = ashare.stk_mins(ts_code='510300.SH', start_date=start_date, end_date=end_date, freq='1min')
     
     # if dataframe is empty
     assert not ashare_minute.empty, f"Error: DataFrame is empty for dates {start_date} to {end_date}"
@@ -75,16 +75,17 @@ def test_a_share_minute(start_date, end_date):
     expected_columns = ['close', 'open', 'high', 'low', 'vol', 'amount']
     for col in expected_columns:
         assert col in ashare_minute.columns, f"Error: Missing expected column '{col}'"
-
+    
     print(f"Test Passed: Daily adj data is valid with {len(ashare_minute)} rows.")
-    print(ashare_minute.columns)
+    # print(ashare_minute.columns)
+    # print(ashare_minute.dtypes)
     print(ashare_minute.head(10))
     return True
 
 
-if __name__ == '__main__':
-    start_date = '20250101'
-    end_date = '20250201'
+# if __name__ == '__main__':
+#     start_date = '20250101'
+#     end_date = '20250201'
 
     # us data test
     # test_calendar(start_date, end_date)
@@ -93,4 +94,4 @@ if __name__ == '__main__':
     # test_adj_daily(start_date, end_date)
 
     # a-share minute data test
-    test_a_share_minute(start_date, end_date)
+    # test_a_share_minute(start_date, end_date)
