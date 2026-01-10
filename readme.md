@@ -13,6 +13,8 @@ This framework transforms intraday volatility and trend dynamics into execution 
 
 A-share 1-minute OHLCV and Limit Order Book (LOB) data for liquid constituents: 300ETF (Tushare code `510300.SH`) from `Tushare`. Leveraging multiple years of historical data to satisfy the sample density requirements for neuroevolutionary training.
 
+Period: 20200101-20251231
+
 **Strategy Pipeline**
 
 1. **SGU Training**: Develop standalone XGBoost (Volatility) and LSTM (Trend) models to generate the 3D state space $[I, RR, TR]$.
