@@ -12,8 +12,10 @@ class SGU1_dataset:
     """
 
     def __init__(self, snap:pd.DataFrame, device='cpu'):
-        self.df = snap.sort_values('trade_time').copy(deep=True)
+        self.df = snap.sort_values(['trade_date', 'trade_time']).reset_index(drop=True).copy()
         self.device = device
+        # filter out zero price, since no trades/quotes available
+        self.df = self.df[(self.df['bidprice1'] > 0) & (self.df['askprice1'] > 0)].copy()
 
         times = self.df['trade_time'].apply(self.get_seconds).values
         self.norm_time = torch.tensor((times - times.min()) / (times.max() - times.min()),
@@ -52,9 +54,9 @@ class SGU1_dataset:
 
         # realized ranges / lagged labels
         # first we calculate the past RR over a window of 10
-        past_max_10 = ts_rolling_max(self.mid, 10)
-        past_min_10 = ts_rolling_min(self.mid, 10)
-        past_rr_10 = ts_sub(past_max_10, past_min_10)
+        log_r_max_10 = ts_log(ts_rolling_max(self.mid, 10))
+        log_r_min_10 = ts_log(ts_rolling_min(self.mid, 10))
+        past_rr_10 = ts_sub(log_r_max_10, log_r_min_10)
         for L in [1, 2, 3, 4, 5]:
             f[f'f_lag_rr_{L}'] = ts_delay(past_rr_10, L)
         
@@ -78,24 +80,39 @@ class SGU1_dataset:
         RR_t,k = ln(max(P_{t+1...t+k}) / min(P_{t+1...t+k}))
         """
         # Calculate backward rolling max/min for window 10
-        r_max = ts_rolling_max(self.mid, k_future)
-        r_min = ts_rolling_min(self.mid, k_future)
+        log_mid = ts_log(self.mid)
+        r_max = ts_rolling_max(log_mid, k_future)
+        r_min = ts_rolling_min(log_mid, k_future)
 
         # Shift backward by 10 to align future max/min with current time t
         future_max = pd.Series(r_max.cpu().numpy()).shift(-k_future)
         future_min = pd.Series(r_min.cpu().numpy()).shift(-k_future)
 
         # Log Range: ln(max) - ln(min)
-        label_rr = np.log(future_max.values) - np.log(future_min.values)
+        label_rr = future_max - future_min
         return pd.Series(label_rr, name=f'label_rr_{k_future}')
     
-    def gen_task_dataset(self):
+    def gen_task_dataset(self, use_event_sampling=True):
+        """Start at 09:30:00.000"""
         f_dict = self.compute_features()
-        features = pd.DataFrame({k: v.cpu().numpy() for k, v in f_dict.items()})
+        features = pd.DataFrame({k: v.cpu().numpy() for k, v in f_dict.items()}, index=self.df.index)
         labels = self.compute_labels()
+
         dataset = pd.concat([features, labels], axis=1)
-        dataset.index = self.df['trade_time']
-        return dataset.dropna()
+        dataset['trade_time'] = self.df['trade_time'].values
+        dataset.replace([np.inf, -np.inf], np.nan, inplace=True)
+        dataset = dataset.dropna()
+
+        if use_event_sampling:
+            # per 19-changes as a bucket
+            mid_prices = (self.df['bidprice1'] + self.df['askprice1']) / 2.0
+            change_indices = self.df.index[mid_prices.diff() != 0].tolist()
+            step_indices = change_indices[::19]
+            dataset = dataset.loc[dataset.index.intersection(step_indices)]
+
+        dataset = dataset[dataset['trade_time'] >= 93000000]
+
+        return dataset.drop(columns=['trade_time']).reset_index(drop=True)
     
     def get_seconds(self, t):
         h = t // 10000000
