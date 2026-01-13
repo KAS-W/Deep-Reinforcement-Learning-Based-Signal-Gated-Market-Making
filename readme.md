@@ -11,9 +11,9 @@ This framework transforms intraday volatility and trend dynamics into execution 
 
 **Data**
 
-A-share 1-minute OHLCV and Limit Order Book (LOB) data for liquid constituents: 300ETF (Tushare code `510300.SH`) from `Tushare`. Leveraging multiple years of historical data to satisfy the sample density requirements for neuroevolutionary training.
+A-share Limit Order Book (LOB) data for liquid constituents: 300ETF (Tushare code `510300.SH`) from `Tushare`. Leveraging multiple years of historical data to satisfy the sample density requirements for neuroevolutionary training.
 
-Period: 20200101-20251231
+Period: 20240401-20240630
 
 **Strategy Pipeline**
 

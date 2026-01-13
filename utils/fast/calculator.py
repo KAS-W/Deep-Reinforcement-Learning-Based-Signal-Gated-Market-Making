@@ -4,7 +4,7 @@ from torch import Tensor
 from numpy import ndarray
 from pandas import DataFrame, Series
 from typing import Union
-from oper import *
+from utils.fast.oper import *
 
 def ts_rolling_mean(x, window: int):
     view = _get_rolling_view(x, window)
