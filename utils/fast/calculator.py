@@ -6,41 +6,62 @@ from pandas import DataFrame, Series
 from typing import Union
 from utils.fast.oper import *
 
+def _align_output(x, result, window):
+    """fill nan into rolling results"""
+    pad_size = window - 1
+    if isinstance(x, Tensor):
+        # fill Nan to head
+        pad = torch.full((pad_size, *result.shape[1:]), float('nan'), device=x.device, dtype=x.dtype)
+        return torch.cat([pad, result], dim=0)
+    elif isinstance(x, ndarray):
+        pad = np.full((pad_size, *result.shape[1:]), np.nan)
+        return np.concatenate([pad, result], axis=0)
+    # pandas has automatic alignment
+    return result
+
 def ts_rolling_mean(x, window: int):
     view = _get_rolling_view(x, window)
     if isinstance(x, Tensor):
-        return ts_mean(view, axis=-1)
+        res = ts_mean(view, axis=1)
+        return _align_output(x, res, window)
     elif isinstance(x, (DataFrame, Series)):
-        return view.mean()
+        return x.rolling(window=window).mean()
     else:
-        return ts_mean(view, axis=-1)
+        res = ts_mean(view, axis=1)
+        return _align_output(x, res, window)
     
 def ts_rolling_std(x, window: int):
     view = _get_rolling_view(x, window)
     if isinstance(x, Tensor):
-        return ts_std(view, axis=-1)
+        res = ts_std(view, axis=1)
+        return _align_output(x, res, window)
     elif isinstance(x, (DataFrame, Series)):
-        return view.std()
+        return x.rolling(window=window).std()
     else:
-        return ts_std(view, axis=-1)
-    
+        res = ts_std(view, axis=1)
+        return _align_output(x, res, window)
+
 def ts_rolling_max(x, window: int):
     view = _get_rolling_view(x, window)
     if isinstance(x, Tensor):
-        return ts_max(view, axis=-1)
+        res = ts_max(view, axis=1)
+        return _align_output(x, res, window)
     elif isinstance(x, (DataFrame, Series)):
-        return view.max()
+        return x.rolling(window=window).max()
     else:
-        return ts_max(view, axis=-1)
-    
+        res = ts_max(view, axis=1)
+        return _align_output(x, res, window)
+
 def ts_rolling_min(x, window: int):
     view = _get_rolling_view(x, window)
     if isinstance(x, Tensor):
-        return ts_min(view, axis=-1)
+        res = ts_min(view, axis=1)
+        return _align_output(x, res, window)
     elif isinstance(x, (DataFrame, Series)):
-        return view.min()
+        return x.rolling(window=window).min()
     else:
-        return ts_min(view, axis=-1)
+        res = ts_min(view, axis=1)
+        return _align_output(x, res, window)
     
 def ts_rolling_slope(x, window: int):
     """
@@ -51,10 +72,12 @@ def ts_rolling_slope(x, window: int):
     """
     view = _get_rolling_view(x, window)
     if isinstance(x, (Tensor, ndarray)):
-        return ts_slope(view)
+        res = ts_slope(view, axis=1)
+        return _align_output(x, res, window)
     elif isinstance(x, (DataFrame, Series)):
         # Apply static slope logic over the rolling window
-        return view.apply(lambda win: ts_slope(win.values))
+        # extremyly slow, avoid pandas if you can
+        return x.rolling(window).apply(lambda win: ts_slope(win.values))
     
 def ts_delay(x: Union[Tensor, ndarray, DataFrame, Series], k: int):
     """
@@ -64,7 +87,7 @@ def ts_delay(x: Union[Tensor, ndarray, DataFrame, Series], k: int):
         return x.shift(k)
     elif isinstance(x, Tensor):
         # Pad with NaNs to maintain length alignment
-        out = torch.full_like(x, float('nan'))
+        out = torch.full_like(x, float('nan'), dtype=torch.float32)
         out[k:] = x[:-k]
         return out
     elif isinstance(x, ndarray):

@@ -19,6 +19,15 @@ def ts_log(x: Union[Tensor, ndarray, DataFrame, Series]) -> Union[Tensor, ndarra
     else:
         raise WrongInputTypeError
     
+def ts_add(x: Union[Tensor, ndarray, DataFrame, Series], 
+           y: Union[Tensor, ndarray, DataFrame, Series]) -> Union[Tensor, ndarray, DataFrame, Series]:
+    if isinstance(x, Tensor):
+        return torch.add(x, y)
+    elif isinstance(x, (ndarray, DataFrame, Series)):
+        return np.add(x, y)
+    else:
+        raise WrongInputTypeError
+    
 def ts_sub(x: Union[Tensor, ndarray, DataFrame, Series], 
            y: Union[Tensor, ndarray, DataFrame, Series]) -> Union[Tensor, ndarray, DataFrame, Series]:
     if isinstance(x, Tensor):
@@ -69,21 +78,43 @@ def ts_mean(x: Union[Tensor, ndarray, DataFrame, Series], axis=0) -> Union[Tenso
     else:
         raise WrongInputTypeError
     
-def ts_slope(x: Union[Tensor, ndarray, DataFrame, Series]) -> Union[Tensor, ndarray, DataFrame, Series]:
-    n = x.shape[0]
-    # generate time-sereis variable t = [0, 1, 2, ..., n-1]
+# def ts_slope(x: Union[Tensor, ndarray, DataFrame, Series]) -> Union[Tensor, ndarray, DataFrame, Series]:
+#     n = x.shape[0]
+#     # generate time-sereis variable t = [0, 1, 2, ..., n-1]
+#     if isinstance(x, Tensor):
+#         t = torch.arange(n, device=x.device, dtype=x.dtype).view(-1, 1)
+#         # OLS: (t't)^-1 t'x
+#         t_mean = torch.mean(t)
+#         x_mean = torch.mean(x, dim=0)
+#         numerator = torch.sum((t - t_mean) * (x - x_mean), dim=0)
+#         denominator = torch.sum((t - t_mean)**2)
+#         return numerator / denominator
+#     elif isinstance(x, (ndarray, DataFrame, Series)):
+#         t = np.arange(n)
+#         t_mean = np.mean(t)
+#         x_mean = np.mean(x, axis=0)
+#         num = np.sum((t - t_mean)[:, None] * (x - x_mean), axis=0)
+#         den = np.sum((t - t_mean)**2)
+#         return num / den
+    
+def ts_slope(x: Union[Tensor, ndarray, DataFrame, Series], axis=-1) -> Union[Tensor, ndarray, DataFrame, Series]:
+    n = x.shape[axis]
     if isinstance(x, Tensor):
-        t = torch.arange(n, device=x.device, dtype=x.dtype).view(-1, 1)
-        # OLS: (t't)^-1 t'x
-        t_mean = torch.mean(t)
-        x_mean = torch.mean(x, dim=0)
-        numerator = torch.sum((t - t_mean) * (x - x_mean), dim=0)
-        denominator = torch.sum((t - t_mean)**2)
-        return numerator / denominator
-    elif isinstance(x, (ndarray, DataFrame, Series)):
+        t = torch.arange(n, device=x.device, dtype=x.dtype)
+        t_mean = t.mean()
+        # pre-calc ols slope: (t - t_mean) / sum((t - t_mean)^2)
+        denom = torch.sum((t - t_mean)**2)
+        weights = (t - t_mean) / denom
+        new_shape = [1] * x.dim()
+        new_shape[axis] = n
+        weights = weights.view(new_shape)
+        return (x * weights).sum(dim=axis)
+    else:
         t = np.arange(n)
-        t_mean = np.mean(t)
-        x_mean = np.mean(x, axis=0)
-        num = np.sum((t - t_mean)[:, None] * (x - x_mean), axis=0)
-        den = np.sum((t - t_mean)**2)
-        return num / den
+        t_mean = t.mean()
+        denom = np.sum((t - t_mean)**2)
+        weights = (t - t_mean) / denom
+        new_shape = [1] * x.ndim
+        new_shape[axis] = n
+        weights = weights.reshape(new_shape)
+        return np.sum(x * weights, axis=axis)

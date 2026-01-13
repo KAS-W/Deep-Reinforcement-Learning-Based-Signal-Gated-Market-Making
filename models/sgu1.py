@@ -1,6 +1,6 @@
 import xgboost as xgb
 
-class SGU1XGBModel:
+class SGU1:
     """XGBoost Model for Signal Gate Unit 1"""
 
     def __init__(self, model_path=None):
