@@ -15,14 +15,14 @@ class SGU1_dataset:
         self.df = snap.sort_values('trade_time').copy(deep=True)
         self.device = device
 
-        times = self.df['trad_time'].apply(self.get_seconds).values
+        times = self.df['trade_time'].apply(self.get_seconds).values
         self.norm_time = torch.tensor((times - times.min()) / (times.max() - times.min()),
                                        dtype=torch.float32, device=device)
 
         # etf price should div by 10000 and turn to Tensor
-        self.close = torch.tensor(self.df['trade_price'].values, dtype=torch.float32, device=device) / 10000.0
-        self.bid1 = torch.tensor(self.df['bidprice1'].values, dtype=torch.float32, device=device) / 10000.0
-        self.ask1 = torch.tensor(self.df['askprice1'].values, dtype=torch.float32, device=device) / 10000.0
+        self.close = torch.tensor(self.df['trade_price'].values, dtype=torch.float32, device=device)
+        self.bid1 = torch.tensor(self.df['bidprice1'].values, dtype=torch.float32, device=device)
+        self.ask1 = torch.tensor(self.df['askprice1'].values, dtype=torch.float32, device=device)
 
         # mid price
         self.mid = (self.bid1 + self.ask1) / 2.0
