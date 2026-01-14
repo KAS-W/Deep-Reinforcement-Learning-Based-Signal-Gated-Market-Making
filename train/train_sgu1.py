@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from utils.analyzer import evaluate_sgu1_comparison, plot_importance
-from models.sgu1_prepare import SGU1_dataset
+from models.dataloader import SGU1Dataset
 from models.sgu1 import SGU1
 
 def dataloader(data_pro:str='', start:int=20240501, end:int=20240531):
@@ -34,9 +34,9 @@ def dataloader(data_pro:str='', start:int=20240501, end:int=20240531):
 
         day_df = day_df[day_df['trade_time'] >= 92500000].copy()
 
-        loader = SGU1_dataset(day_df)
+        loader = SGU1Dataset(day_df)
 
-        day_data = loader.gen_task_dataset(use_event_sampling=True)
+        day_data = loader.gen_dataset(use_event_sampling=True)
 
         if not day_data.empty:
             day_datasets.append(day_data)
