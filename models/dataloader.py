@@ -18,12 +18,10 @@ class MarketDatasetBase:
         # filter out zero-price data
         self.df = self.df[(self.df['bidprice1'] > 0) & (self.df['askprice1'] > 0)].copy()
         # norm time
-        # times = self.df['trade_time'].apply(self.get_seconds).values
-        # self.norm_time = torch.tensor((times - times.min()) / (times.max() - times.min()),
-        #                                dtype=torch.float32, device=device)
         raw_times = self.df['trade_time'].values
-        market_secs = np.array([self.get_seconds(t) for t in raw_times])
+        market_secs = np.array([self.get_effective_seconds(t) for t in raw_times])
         self.norm_time = torch.tensor(market_secs / 14400.0, dtype=torch.float32, device=device)
+        self.hour_time = torch.tensor((raw_times // 10000000), dtype=torch.float32, device=device)
         
         self.close = torch.tensor(self.df['trade_price'].values, dtype=torch.float32, device=device)
         self.bid1 = torch.tensor(self.df['bidprice1'].values, dtype=torch.float32, device=device)
@@ -32,16 +30,37 @@ class MarketDatasetBase:
         self.bidvol1 = torch.tensor(self.df['bidvol1'].values, dtype=torch.float32, device=device)
         self.askvol1 = torch.tensor(self.df['askvol1'].values, dtype=torch.float32, device=device)
 
-    def get_seconds(self, t):
-        """Turn hhmmssmmm into seconds"""
-        h = t // 10000000
-        m = (t // 100000) % 100
-        s = (t // 1000) % 100
-        total_sec = h * 3600 + m * 60 + s
-        if total_sec <= 41400:
-            return max(0, total_sec - 34200)
-        else:
-            return 7200 + max(0, total_sec - 46800)
+        self.m = self._compute_pseudo_mid()
+
+    def get_effective_seconds(self, t):
+        h, m, s = t // 10000000, (t // 100000) % 100, (t // 1000) % 100
+        ts = h * 3600 + m * 60 + s
+        return max(0, ts - 34200) if ts <= 41400 else 7200 + max(0, ts - 46800)
+    
+    def _compute_pseudo_mid(self):
+        """Lee-Ready Algo"""
+        mid = (self.bid1 + self.ask1) / 2.0
+        trade_price = torch.tensor(self.df['trade_price'].values, dtype=torch.float32, device=self.device)
+        is_buy = (trade_price > mid).float()
+        is_sell = (trade_price < mid).float()
+        has_trade = (self.vol.diff() > 0).float()
+
+        p_buy_max = trade_price * is_buy
+        p_sell_min = trade_price * is_sell
+
+        m_i = torch.where(
+            (is_buy > 0) & (is_sell == 0),
+            (p_buy_max + self.bid1) / 2.0,
+            torch.where(
+                (is_sell > 0) & (is_buy == 0),
+                (self.ask1 + p_sell_min) / 2.0,
+                mid
+            )
+        )
+
+        m_i = torch.where(has_trade > 0, m_i, mid)
+
+        return m_i
     
     def _compute_features(self):
         f = {}
