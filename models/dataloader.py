@@ -29,6 +29,7 @@ class MarketDatasetBase:
         self.mid = (self.bid1 + self.ask1) / 2.0
         self.bidvol1 = torch.tensor(self.df['bidvol1'].values, dtype=torch.float32, device=device)
         self.askvol1 = torch.tensor(self.df['askvol1'].values, dtype=torch.float32, device=device)
+        self.vol = torch.tensor(self.df['vol'].values, dtype=torch.float32, device=device)
 
         self.m = self._compute_pseudo_mid()
 
@@ -41,9 +42,12 @@ class MarketDatasetBase:
         """Lee-Ready Algo"""
         mid = (self.bid1 + self.ask1) / 2.0
         trade_price = torch.tensor(self.df['trade_price'].values, dtype=torch.float32, device=self.device)
+        
+        vol_diff = torch.diff(self.vol, prepend=self.vol[:1]) 
+        has_trade = (vol_diff > 0).float()
+
         is_buy = (trade_price > mid).float()
         is_sell = (trade_price < mid).float()
-        has_trade = (self.vol.diff() > 0).float()
 
         p_buy_max = trade_price * is_buy
         p_sell_min = trade_price * is_sell
@@ -146,7 +150,7 @@ class SGU1Dataset(MarketDatasetBase):
             # 19-event sampling
             mid_prices = (self.df['bidprice1'] + self.df['askprice1']) / 2.0
             change_indices = self.df.index[mid_prices.diff() != 0].tolist()
-            step_indices = change_indices[::19]
+            step_indices = change_indices[::7]
             dataset = dataset.loc[dataset.index.intersection(step_indices)]
 
         # here we keep data in continuous auction phase
@@ -171,78 +175,269 @@ class SGU2Dataset(MarketDatasetBase):
     def gen_dataset(self, time_steps=50, k_future=10):
         f_dict = self._compute_features()
         features = pd.DataFrame({k: v.cpu().numpy() for k, v in f_dict.items()}, index=self.df.index)
-        label_col = f'label_slope_{k_future}'
-        labels = self.compute_labels(k_future=k_future)
-
-        dataset = pd.concat([features, labels], axis=1)
-        dataset['trade_time'] = self.df['trade_time'].values
-        dataset['vol'] = self.df['vol'].values
-        dataset = dataset[dataset['trade_time'] >= 93000000].dropna()
-        # dataset['trade_time'] = self.df['trade_time'].values
-        # dataset = dataset.dropna()
-
-        # event-19 sampling
+        
         mid_prices = (self.df['bidprice1'] + self.df['askprice1']) / 2.0
-        change_indices = self.df.index[mid_prices.diff() != 0].tolist()
-        step_indices = change_indices[::19]
+        event_indices = self.df.index[mid_prices.diff() != 0].tolist()
+        
+        log_mid_events = torch.tensor(np.log(mid_prices.loc[event_indices].values), device=self.device, dtype=torch.float32)
+        slope_events = ts_rolling_slope(log_mid_events, k_future)
 
-        # vol-bucket sampling
-        # cum_vol = dataset['vol'].cumsum()
-        # bar_counts = cum_vol // 5000
-        # step_indices = dataset.index[bar_counts.diff() > 0].tolist()
-      
-        dataset = dataset.loc[dataset.index.intersection(step_indices)]
-        dataset = dataset[dataset['trade_time'] >= 93000000]
+        if isinstance(slope_events, torch.Tensor):
+            slope_events = slope_events.cpu().numpy()
 
-        X = dataset.drop(columns=[label_col, 'trade_time']).values
-        y = dataset[f'label_slope_{k_future}'].values * 1000
+        # shift in event flows
+        future_slope_series = pd.Series(slope_events, index=event_indices).shift(-k_future)
+        
+        dataset = features.loc[event_indices].copy()
+        dataset['label_slope'] = future_slope_series
+        dataset['trade_time'] = self.df['trade_time'].values[event_indices]
+
+        dataset = dataset.iloc[::8].dropna()
+
+        label_col = 'label_slope'
+        X_all = dataset.drop(columns=[label_col, 'trade_time']).values
+        y_all = dataset[label_col].values * 1000
 
         X_3d, y_3d = [], []
-        for i in range(time_steps, len(X)):
-            X_3d.append(X[i-time_steps:i])
-            y_3d.append(y[i])
+
+        for i in range(time_steps, len(X_all)):
+            X_3d.append(X_all[i-time_steps:i])
+            y_3d.append(y_all[i])
 
         return np.array(X_3d), np.array(y_3d)
+
+        # label_col = f'label_slope_{k_future}'
+        # labels = self.compute_labels(k_future=k_future)
+
+        # dataset = pd.concat([features, labels], axis=1)
+        # dataset['trade_time'] = self.df['trade_time'].values
+        # dataset['vol'] = self.df['vol'].values
+        # dataset = dataset[dataset['trade_time'] >= 93000000].dropna()
+        # # dataset['trade_time'] = self.df['trade_time'].values
+        # # dataset = dataset.dropna()
+
+        # # event-19 sampling
+        # mid_prices = (self.df['bidprice1'] + self.df['askprice1']) / 2.0
+        # change_indices = self.df.index[mid_prices.diff() != 0].tolist()
+        # step_indices = change_indices[::8]
+
+        # # vol-bucket sampling
+        # # cum_vol = dataset['vol'].cumsum()
+        # # bar_counts = cum_vol // 5000
+        # # step_indices = dataset.index[bar_counts.diff() > 0].tolist()
+      
+        # dataset = dataset.loc[dataset.index.intersection(step_indices)]
+        # dataset = dataset[dataset['trade_time'] >= 93000000]
+
+        # X = dataset.drop(columns=[label_col, 'trade_time']).values
+        # y = dataset[f'label_slope_{k_future}'].values * 1000
+
+        # X_3d, y_3d = [], []
+        # for i in range(time_steps, len(X)):
+        #     X_3d.append(X[i-time_steps:i])
+        #     y_3d.append(y[i])
+
+        # return np.array(X_3d), np.array(y_3d)
     
-# class StandardScaler3D:
-#     def __init__(self):
-#         self.mean = None
-#         self.std = None
+class HFTMarketBase:
+    def __init__(self, snap_df: pd.DataFrame, tick_df: pd.DataFrame, device='cpu'):
+        self.device = device
 
-#     def fit(self, X):
+        # calc direction in 1s 
+        tick_df = tick_df.sort_values('trade_time').copy(deep=True)
+        # tick_df['flow'] = tick_df['Volume'] * tick_df['side']
 
-#         self.mean = np.mean(X, axis=(0, 1), keepdims=True)
-#         self.std = np.std(X, axis=(0, 1), keepdims=True) + 1e-9
+        # sep for direction
+        tick_df['net_flow'] = tick_df['Volume'] * tick_df['side']
+        tick_df['abs_flow'] = tick_df['Volume']
+        tick_agg = tick_df.groupby('trade_time').agg({
+            'net_flow': 'sum',   
+            'abs_flow': 'sum'   
+        }).reset_index()
 
-#     def transform(self, X):
-#         if self.mean is None or self.std is None:
-#             raise ValueError("Scaler has not been fitted yet.")
-#         return (X - self.mean) / self.std
+        tick_agg['f_flow_imbalance'] = tick_agg['net_flow'] / (tick_agg['abs_flow'] + 1e-9)
 
-#     def fit_transform(self, X):
-#         self.fit(X)
-#         return self.transform(X)
+        # align tick to snap
+        snap_df = snap_df.sort_values(['trade_date', 'trade_time']).reset_index(drop=True).copy(deep=True)
+        # for each snap, it carries the cumulative flow from ticks
+        # tick_agg = tick_df.groupby('trade_time')['flow'].sum().reset_index()
+
+        self.df = pd.merge_asof(
+            snap_df, 
+            tick_agg, 
+            on='trade_time', 
+            direction='backward'
+        ).fillna(0)
+
+        self.df = self.df[(self.df['bidprice1'] > 0) & (self.df['askprice1'] > 0)].copy()
+
+        self.norm_time = self.compute_norm_time()
+
+        self.bid1 = torch.tensor(self.df['bidprice1'].values, dtype=torch.float32, device=device)
+        self.ask1 = torch.tensor(self.df['askprice1'].values, dtype=torch.float32, device=device)
+
+        # self.trade_flow = torch.tensor(self.df['flow'].values, dtype=torch.float32, device=device)
+        self.trade_flow = torch.tensor(self.df['f_flow_imbalance'].values, dtype=torch.float32, device=device)
+        self.mid = self._compute_pseudo_mid()
+        
+        self.ask_prices = [torch.tensor(self.df[f'askprice{i}'].values, device=device) for i in range(1, 11)]
+        self.ask_vols = [torch.tensor(self.df[f'askvol{i}'].values, device=device) for i in range(1, 11)]
+        self.bid_prices = [torch.tensor(self.df[f'bidprice{i}'].values, device=device) for i in range(1, 11)]
+        self.bid_vols = [torch.tensor(self.df[f'bidvol{i}'].values, device=device) for i in range(1, 11)]
+
+        # event: mid-price shifts
+        self.event_mask = torch.cat([torch.tensor([True], device=device), 
+                                     (self.mid[1:] != self.mid[:-1])
+                                    ])
     
-# class FeatureProcesser:
-#     def __init__(self, n_quantiles=1000, output_distribution='normal'):
-#         self.qt = QuantileTransformer(
-#             n_quantiles=n_quantiles, 
-#             output_distribution=output_distribution,
-#             subsample=100000, 
-#             random_state=42
-#         )
+    def _compute_pseudo_mid(self):
+        """Rebuild pseudo mid-price"""
+        mid = (self.bid1 + self.ask1) / 2.0
 
-#     def fit(self, X_3d):
-#         N, T, D = X_3d.shape
-#         X_2d = X_3d.reshape(-1, D)
-#         self.qt.fit(X_2d)
-#         return self
+        m_i = torch.where(
+            self.trade_flow > 0,
+            (mid + self.ask1) / 2.0, 
+            torch.where(
+                self.trade_flow < 0,
+                (mid + self.bid1) / 2.0, 
+                mid                     
+            )
+        )
+        return m_i
     
-#     def transform(self, X_3d):
-#         N, T, D = X_3d.shape
-#         X_2d = X_3d.reshape(-1, D)
-#         X_transformed_2d = self.qt.transform(X_2d)
-#         return X_transformed_2d.reshape(N, T, D)
+    def compute_norm_time(self):
+        t = self.df['trade_time'].values // 1000
+        minutes = (t // 10000) * 60 + (t // 100 % 100)
+        progress = np.where(
+        t <= 113000,
+        minutes - (9 * 60 + 30),
+        minutes - (9 * 60 + 30) - 90
+        )
 
-#     def fit_transform(self, X_3d):
-#         return self.fit(X_3d).transform(X_3d)
+        norm_time = np.clip(progress / 240.0, 0, 1)
+        return torch.tensor(norm_time, dtype=torch.float32, device=self.device)
+
+class SGU1DataPro(HFTMarketBase):
+    def compute_labels(self, k_future=10):
+        log_mid = ts_log(self.mid)
+        r_max = ts_rolling_max(log_mid, k_future)
+        r_min = ts_rolling_min(log_mid, k_future)
+
+        rr = ts_sub(r_max, r_min)
+        return pd.Series(rr.cpu().numpy()).shift(-k_future)
+    
+    def gen_dataset(self, k_future=10, event_step=19):
+        f = {}
+        log_mid = ts_log(self.mid)
+
+        for i in range(5):
+            f[f'f_obi_l{i+1}'] = ts_div(ts_sub(self.bid_vols[i], self.ask_vols[i]), 
+                                        ts_add(self.bid_vols[i], self.ask_vols[i]))
+            f[f'f_spread_l{i+1}'] = ts_sub(self.ask_prices[i], self.bid_prices[i])
+
+        f['f_tick_flow'] = self.trade_flow
+        # f['f_tick_flow'] = torch.fft.irfft(torch.fft.rfft(self.trade_flow)[:len(self.trade_flow)//20], n=len(self.trade_flow))
+        # f['f_tick_flow'] = torch.fft.irfft(torch.fft.rfft(self.trade_flow) * torch.linspace(1, 0, len(torch.fft.rfft(self.trade_flow)), device=self.device)**2, n=len(self.trade_flow))
+        
+        f['f_log_ret_5'] = ts_sub(log_mid, ts_delay(log_mid, 5))
+        f['f_past_rr_10'] = ts_sub(ts_log(ts_rolling_max(self.mid, 10)), 
+                                    ts_log(ts_rolling_min(self.mid, 10)))
+        
+        f['f_norm_time'] = self.norm_time
+
+        features = pd.DataFrame({k: v.cpu().numpy() for k, v in f.items()}, index=self.df.index)
+        labels = self.compute_labels(k_future).rename('label_rr')
+
+        dataset = pd.concat([features, labels], axis=1)
+
+        event_indices = np.where(self.event_mask.cpu().numpy())[0]
+        dataset = dataset.iloc[event_indices]
+
+        dataset = dataset.iloc[::event_step].dropna()
+        trade_times = self.df['trade_time'].iloc[dataset.index]
+        dataset = dataset[trade_times >= 93000000]
+
+        return dataset.reset_index(drop=True)
+    
+class SGU2DataPro(HFTMarketBase):
+    def compute_labels(self, k_future=10):
+        log_mid = ts_log(self.mid)
+        slope = ts_rolling_slope(log_mid, k_future)
+
+        if isinstance(slope, torch.Tensor):
+            slope = slope.cpu().numpy()
+
+        return pd.Series(slope).shift(-k_future)
+    
+    def gen_dataset(self, k_future=10, time_steps=10, event_step=19):
+        f = {}
+        log_mid = ts_log(self.mid)
+
+        for i in range(5):
+            f[f'f_obi_l{i+1}'] = ts_div(ts_sub(self.bid_vols[i], self.ask_vols[i]), 
+                                        ts_add(self.bid_vols[i], self.ask_vols[i]))
+            f[f'f_spread_l{i+1}'] = ts_sub(self.ask_prices[i], self.bid_prices[i])
+
+        f['f_tick_flow'] = self.trade_flow
+        # f['f_tick_flow'] = f['f_tick_flow'] = torch.fft.irfft(torch.fft.rfft(self.trade_flow)[:len(self.trade_flow)//20], n=len(self.trade_flow))
+        # f['f_tick_flow'] = torch.fft.irfft(torch.fft.rfft(self.trade_flow)[:len(self.trade_flow)//20], n=len(self.trade_flow))
+        # f['f_tick_flow'] = torch.fft.irfft(torch.fft.rfft(self.trade_flow) * torch.linspace(1, 0, len(torch.fft.rfft(self.trade_flow)), device=self.device)**2, n=len(self.trade_flow))
+
+
+        f['f_log_ret_5'] = ts_sub(log_mid, ts_delay(log_mid, 5))
+        f['f_past_rr_10'] = ts_sub(ts_log(ts_rolling_max(self.mid, 10)), 
+                                    ts_log(ts_rolling_min(self.mid, 10)))
+        
+        f['f_norm_time'] = self.norm_time
+        features = pd.DataFrame({k: v.cpu().numpy() for k, v in f.items()}, index=self.df.index)
+
+        label_col = f'label_slope_{k_future}'
+
+        # mid_prices = (self.df['bidprice1'] + self.df['askprice1']) / 2.0
+        # event_indices = self.df.index[mid_prices.diff() != 0].tolist()
+        # mid_diff = torch.cat([torch.tensor([0.0], device=self.device), self.mid[1:] - self.mid[:-1]])
+        # event_mask = (mid_diff != 0).cpu().numpy()
+        # event_indices = self.df.index[event_mask].tolist()  
+        # mid_values = self.mid.cpu().numpy()
+        # mid_series = pd.Series(mid_values, index=self.df.index)
+
+        # log_mid_events = torch.tensor(np.log(mid_prices.loc[event_indices].values), 
+        #                              device=self.device, dtype=torch.float32)
+
+        # log_mid_events = torch.tensor(np.log(mid_series.loc[event_indices].values), 
+        #                               device=self.device, dtype=torch.float32)
+
+        event_mask_ts = torch.diff(self.mid, prepend=self.mid[:1]) != 0
+        log_mid_events = torch.log(self.mid[event_mask_ts]).to(torch.float32)
+
+        event_mask_np = event_mask_ts.cpu().numpy()
+        event_indices = self.df.index[event_mask_np].tolist()
+        
+        slope_events = ts_rolling_slope(log_mid_events, k_future)
+        if isinstance(slope_events, torch.Tensor):
+            slope_events = slope_events.cpu().numpy()
+
+        labels = pd.Series(slope_events, index=event_indices, name=label_col).shift(-k_future)
+        dataset = pd.concat([features, labels], axis=1)
+        dataset['trade_time'] = self.df['trade_time'].values
+
+        step_indices = event_indices[::event_step]
+        dataset = dataset.loc[dataset.index.intersection(step_indices)]
+
+        dataset = dataset[dataset['trade_time'] >= 93000000].dropna()
+
+        X_cols = [c for c in dataset.columns if c not in [label_col, 'trade_time']]
+        X = dataset[X_cols].values
+        y = dataset[label_col].values * 100
+
+        num_samples = len(X) - time_steps
+        if num_samples <= 0:
+            return np.array([]), np.array([])
+        
+        X_3d = np.zeros((num_samples, time_steps, len(X_cols)))
+        for i in range(num_samples):
+            X_3d[i] = X[i : i + time_steps]
+        
+        y_3d = y[time_steps:]
+
+        return X_3d, y_3d

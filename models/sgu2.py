@@ -4,15 +4,30 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 class LSTMNet(nn.Module):
-    def __init__(self, input_size=23, hidden_size=64, num_layers=2):
+    def __init__(self, input_size=23, hidden_size=64, num_layers=2, dropout=0.2):
         super(LSTMNet, self).__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.bn_input = nn.BatchNorm1d(input_size)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        # self.fc = nn.Linear(hidden_size, 1)
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
+        )
+        self._init_weights()
+
+    def _init_weights(self):
+        for name, param in self.lstm.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_uniform_(param)
 
     def forward(self, x):
-        out, _ = self.lstm(x)
-        out = self.fc(out[:, -1, :])
-        return out
+        x = x.permute(0, 2, 1)
+        x = self.bn_input(x)
+        x = x.permute(0, 2, 1)
+        lstm_out, _ = self.lstm(x)
+        last_out = lstm_out[:, -1, :]
+        return self.fc(last_out)
     
 class SGU2:
     """LSTM for signal gate unit 2"""
@@ -21,7 +36,7 @@ class SGU2:
         self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = LSTMNet(input_size, hidden_size, num_layers).to(self.device)
         self.criterion = nn.MSELoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0005)
 
     def train(self, X_train, y_train, X_val, y_val, batch_size=128, epochs=100, early_stopping_rounds=10):
         train_loader = self._prepare_loader(X_train, y_train, batch_size)
@@ -37,8 +52,14 @@ class SGU2:
             for batch_X, batch_y in train_loader:
                 self.optimizer.zero_grad()
                 outputs = self.model(batch_X)
-                loss = self.criterion(outputs.squeeze(), batch_y)
+                mse_loss = self.criterion(outputs.squeeze(), batch_y)
+                direction_penalty = torch.mean(torch.relu(-outputs.squeeze() * batch_y))
+                loss = mse_loss + 0.5 * direction_penalty
                 loss.backward()
+            
+                # clip gradient
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                
                 self.optimizer.step()
                 epoch_train_loss += loss.item()
 

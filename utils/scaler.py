@@ -2,19 +2,25 @@ from sklearn.preprocessing import QuantileTransformer
 import numpy as np
 
 class StandardScaler3D:
-    def __init__(self):
+    def __init__(self, threshold=3.0):
         self.mean = None
         self.std = None
+        self.threshold = threshold
 
     def fit(self, X):
-
-        self.mean = np.mean(X, axis=(0, 1), keepdims=True)
-        self.std = np.std(X, axis=(0, 1), keepdims=True) + 1e-9
+        self.median = np.nanmedian(X, axis=(0, 1), keepdims=True)
+        abs_deviation = np.abs(X - self.median)
+        self.mad = np.nanmedian(abs_deviation, axis=(0, 1), keepdims=True) + 1e-9
+        self.mad = self.mad * 1.4826
+        # self.mean = np.mean(X, axis=(0, 1), keepdims=True)
+        # self.std = np.std(X, axis=(0, 1), keepdims=True) + 1e-9
 
     def transform(self, X):
-        if self.mean is None or self.std is None:
+        if self.median is None or self.mad is None:
             raise ValueError("Scaler has not been fitted yet.")
-        return (X - self.mean) / self.std
+        X_scaled = (X - self.median) / self.mad
+        # return (X - self.mean) / self.std
+        return np.clip(X_scaled, -self.threshold, self.threshold)
 
     def fit_transform(self, X):
         self.fit(X)
