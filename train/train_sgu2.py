@@ -10,7 +10,7 @@ from models.dataloader import SGU2Dataset
 from models.dataloader import SGU2DataPro
 from models.sgu2 import SGU2
 from utils.scaler import StandardScaler3D
-from utils.scaler import FeatureProcesser
+# from utils.scaler import FeatureProcesser
 
 def set_seed(seed=42):
     random.seed(seed)
@@ -75,7 +75,7 @@ def sgu2_pipeline():
 
     return model
 
-def pro_dataloader_sgu2(start:int=20240501, end:int=20240531, time_steps=50, k_future=10):
+def pro_dataloader_sgu2(start:int=20240501, end:int=20240531, time_steps=50, k_future=10, event_step=8):
     snap_dir = r'D:/UW/Course/2026 WINTER/522_trade_sys/replication/data/snap'
     tick_dir = r'D:/UW/Course/2026 WINTER/522_trade_sys/replication/data/tick'
     
@@ -99,11 +99,11 @@ def pro_dataloader_sgu2(start:int=20240501, end:int=20240531, time_steps=50, k_f
         tick_df = pd.read_parquet(tick_path)
 
         snap_df = snap_df[snap_df['trade_time'] >= 93000000].copy()
-        tick_df = tick_df[tick_df['trade_time'] >= 93000000].copy()
+        tick_df = tick_df[tick_df['trade_time'] >= 92500000].copy()
 
         loader = SGU2DataPro(tick_df=tick_df, snap_df=snap_df)
 
-        X_day, y_day = loader.gen_dataset(time_steps=time_steps, k_future=k_future, event_step=8)
+        X_day, y_day = loader.gen_dataset(time_steps=time_steps, k_future=k_future, event_step=event_step)
 
         if X_day.size > 0:
             X_list.append(X_day)
@@ -114,14 +114,15 @@ def pro_dataloader_sgu2(start:int=20240501, end:int=20240531, time_steps=50, k_f
     
     return np.concatenate(X_list, axis=0), np.concatenate(y_list, axis=0)
 
-def pro_sgu2_pipeline(s1=(20240501, 20240518), s2=(20240519, 20240525)):
-    X_train, y_train = pro_dataloader_sgu2(start=s1[0], end=s1[1])
-    X_val, y_val = pro_dataloader_sgu2(start=s2[0], end=s2[1])
+def pro_sgu2_pipeline(s1=(20240401, 20240512), s2=(20240513, 20240531), time_steps=50, event_step=8, scaled=True):
+    X_train, y_train = pro_dataloader_sgu2(start=s1[0], end=s1[1], time_steps=time_steps, event_step=event_step)
+    X_val, y_val = pro_dataloader_sgu2(start=s2[0], end=s2[1], time_steps=time_steps, event_step=event_step)
 
-    scaler = StandardScaler3D()
-    # scaler = FeatureProcesser()
-    X_train = scaler.fit_transform(X_train)
-    X_val = scaler.transform(X_val)
+    if scaled:
+        y_train, y_val = y_train * 1000, y_val * 1000
+        scaler = StandardScaler3D()
+        X_train = scaler.fit_transform(X_train)
+        X_val = scaler.transform(X_val)
 
     model = SGU2(input_size=X_train.shape[2], hidden_size=64)
 
@@ -148,5 +149,10 @@ def pro_sgu2_pipeline(s1=(20240501, 20240518), s2=(20240519, 20240525)):
 
 if __name__ == '__main__':
     set_seed(114514)
-    # model = sgu2_pipeline()
-    model = pro_sgu2_pipeline()
+    model = pro_sgu2_pipeline(
+        s1=(20240401, 20240512),
+        s2=(20240513, 20240531),
+        time_steps=20,
+        event_step=57,
+        scaled=True
+    )

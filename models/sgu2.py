@@ -35,8 +35,9 @@ class SGU2:
     def __init__(self, input_size=23, hidden_size=64, num_layers=2, device=None):
         self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = LSTMNet(input_size, hidden_size, num_layers).to(self.device)
-        self.criterion = nn.MSELoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0005)
+        # self.criterion = nn.MSELoss()
+        self.criterion = nn.L1Loss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
 
     def train(self, X_train, y_train, X_val, y_val, batch_size=128, epochs=100, early_stopping_rounds=10):
         train_loader = self._prepare_loader(X_train, y_train, batch_size)
@@ -52,9 +53,12 @@ class SGU2:
             for batch_X, batch_y in train_loader:
                 self.optimizer.zero_grad()
                 outputs = self.model(batch_X)
-                mse_loss = self.criterion(outputs.squeeze(), batch_y)
-                direction_penalty = torch.mean(torch.relu(-outputs.squeeze() * batch_y))
-                loss = mse_loss + 0.5 * direction_penalty
+                # mse_loss = self.criterion(outputs.squeeze(), batch_y)
+                # zero_mask = (batch_y == 0).float()
+                # zero_penalty = torch.mean(zero_mask * torch.abs(outputs.squeeze()))
+                # direction_penalty = torch.mean(torch.relu(-outputs.squeeze() * batch_y))
+                # loss = mse_loss + 0 * zero_penalty + 0 * direction_penalty 
+                loss = self.criterion(outputs.squeeze(), batch_y)
                 loss.backward()
             
                 # clip gradient
