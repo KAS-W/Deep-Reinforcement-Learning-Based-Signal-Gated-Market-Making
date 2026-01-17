@@ -3,114 +3,85 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-class LSTMNet(nn.Module):
-    def __init__(self, input_size=23, hidden_size=64, num_layers=2, dropout=0.2):
-        super(LSTMNet, self).__init__()
-        self.bn_input = nn.BatchNorm1d(input_size)
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
-        # self.fc = nn.Linear(hidden_size, 1)
-        self.fc = nn.Sequential(
-            nn.Linear(hidden_size, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1)
-        )
-        self._init_weights()
-
-    def _init_weights(self):
-        for name, param in self.lstm.named_parameters():
-            if 'weight' in name:
-                nn.init.xavier_uniform_(param)
+class SGU2Model(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(SGU2Model, self).__init__()
+        # 论文要求：LSTM 隐藏层单元数为 10
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+        # 论文要求：线性输出层
+        self.fc = nn.Linear(hidden_size, 1)
 
     def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.bn_input(x)
-        x = x.permute(0, 2, 1)
-        lstm_out, _ = self.lstm(x)
-        last_out = lstm_out[:, -1, :]
-        return self.fc(last_out)
-    
+        # x shape: (batch, time_steps, input_size)
+        out, _ = self.lstm(x)
+        # 取最后一个时间步的输出
+        return self.fc(out[:, -1, :])
+
 class SGU2:
-    """LSTM for signal gate unit 2"""
+    def __init__(self, input_size=1, hidden_size=10, device='cpu'):
+        self.device = torch.device(device)
+        self.model = SGU2Model(input_size, hidden_size).to(self.device)
+        self.best_state = None  # --- 关键修正：初始化属性 ---
 
-    def __init__(self, input_size=23, hidden_size=64, num_layers=2, device=None):
-        self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = LSTMNet(input_size, hidden_size, num_layers).to(self.device)
-        # self.criterion = nn.MSELoss()
-        self.criterion = nn.L1Loss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+    def train(self, X_train, y_train, X_val, y_val, batch_size=128, epochs=100, lr=0.001):
+        X_train_t = torch.tensor(X_train, dtype=torch.float32).to(self.device)
+        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(self.device)
+        X_val_t = torch.tensor(X_val, dtype=torch.float32).to(self.device)
+        y_val_t = torch.tensor(y_val, dtype=torch.float32).unsqueeze(1).to(self.device)
 
-    def train(self, X_train, y_train, X_val, y_val, batch_size=128, epochs=100, early_stopping_rounds=10):
-        train_loader = self._prepare_loader(X_train, y_train, batch_size)
-        val_loader = self._prepare_loader(X_val, y_val, batch_size)
+        train_loader = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=batch_size, shuffle=True)
+        
+        # 论文要求：Adam 优化器与 MSE 损失函数
+        optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        criterion = nn.MSELoss()
 
-        history = {'train_loss': [], 'val_loss': []}
         best_val_loss = float('inf')
-        stop_count = 0
+        patience = 5
+        trigger_times = 0
+        history = {'train_loss': [], 'val_loss': []}
 
         for epoch in range(epochs):
             self.model.train()
-            epoch_train_loss = 0
-            for batch_X, batch_y in train_loader:
-                self.optimizer.zero_grad()
-                outputs = self.model(batch_X)
-                # mse_loss = self.criterion(outputs.squeeze(), batch_y)
-                # zero_mask = (batch_y == 0).float()
-                # zero_penalty = torch.mean(zero_mask * torch.abs(outputs.squeeze()))
-                # direction_penalty = torch.mean(torch.relu(-outputs.squeeze() * batch_y))
-                # loss = mse_loss + 0 * zero_penalty + 0 * direction_penalty 
-                loss = self.criterion(outputs.squeeze(), batch_y)
+            train_loss = 0
+            for batch_x, batch_y in train_loader:
+                optimizer.zero_grad()
+                outputs = self.model(batch_x)
+                loss = criterion(outputs, batch_y)
                 loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+
+            # 验证逻辑
+            self.model.eval()
+            with torch.no_grad():
+                val_outputs = self.model(X_val_t)
+                val_loss = criterion(val_outputs, y_val_t).item()
             
-                # clip gradient
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                
-                self.optimizer.step()
-                epoch_train_loss += loss.item()
+            history['train_loss'].append(train_loss / len(train_loader))
+            history['val_loss'].append(val_loss)
 
-            avg_train_loss = epoch_train_loss / len(train_loader)
-            avg_val_loss = self._evaluate_loss(val_loader)
-            
-            history['train_loss'].append(avg_train_loss)
-            history['val_loss'].append(avg_val_loss)
-
-            print(f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
-
-            # Early Stopping
-            if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
-                stop_count = 0
-                self.best_state = self.model.state_dict()
+            # --- 关键修正：确保 best_state 被赋值 ---
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                self.best_state = self.model.state_dict() # 保存当前最优参数
+                trigger_times = 0
             else:
-                stop_count += 1
-                if stop_count >= early_stopping_rounds:
-                    print(f"Early stopping at epoch {epoch+1}")
-                    self.model.load_state_dict(self.best_state)
+                trigger_times += 1
+                if trigger_times >= patience:
+                    print(f"Early stopping at epoch {epoch}")
                     break
+
+        # 在训练结束时加载最优状态
+        if self.best_state is not None:
+            self.model.load_state_dict(self.best_state)
         
         return history
 
-    def _prepare_loader(self, X, y, batch_size):
-        X_t = torch.tensor(X, dtype=torch.float32).to(self.device)
-        y_t = torch.tensor(y, dtype=torch.float32).to(self.device)
-        return DataLoader(TensorDataset(X_t, y_t), batch_size=batch_size, shuffle=True)
-    
-    def _evaluate_loss(self, loader):
-        self.model.eval()
-        total_loss = 0
-        with torch.no_grad():
-            for batch_X, batch_y in loader:
-                outputs = self.model(batch_X)
-                total_loss += self.criterion(outputs.squeeze(), batch_y).item()
-        return total_loss / len(loader)
-    
     def predict(self, X):
         self.model.eval()
-        X_t = torch.tensor(X, dtype=torch.float32).to(self.device)
         with torch.no_grad():
-            return self.model(X_t).cpu().numpy().flatten()
-        
+            X_t = torch.tensor(X, dtype=torch.float32).to(self.device)
+            return self.model(X_t).cpu().numpy()
+
     def save(self, path):
         torch.save(self.model.state_dict(), path)
-
-    def load(self, path):
-        self.model.load_state_dict(torch.load(path))
