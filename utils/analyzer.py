@@ -1,10 +1,7 @@
 import numpy as np 
 import pandas as pd
-import os
-import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import spearmanr
 
 def evaluate_sgu1_comparison(model, X_val, y_val, graph_pth):
     preds = model.predict(X_val)
@@ -19,7 +16,7 @@ def evaluate_sgu1_comparison(model, X_val, y_val, graph_pth):
 
     std_ratio = np.std(preds) / (np.std(y_true) + 1e-9)
 
-    print(f"--- SGU2 Paper Replication Metrics ---")
+    print(f"--- SGU1 Paper Replication Metrics ---")
     print(f"Validation MSE:        {mse:.6f}")
     print(f"Validation RMSE:       {rmse:.6f}")
     print(f"Relative Improvement:  {improvement:.2f}% (vs Zero-Baseline)")
@@ -42,31 +39,6 @@ def evaluate_sgu1_comparison(model, X_val, y_val, graph_pth):
     plt.savefig(graph_pth)
     plt.close()
 
-    # y_true = np.asarray(y_val).flatten()
-    # preds = np.asarray(preds).flatten()
-    
-    # pearson_corr = np.corrcoef(preds, y_true)[0, 1]
-    # spearman_corr, _ = spearmanr(preds, y_true)
-    
-    # print(f"--- S2 Comparison Metrics ---")
-    # print(f"Pearson Correlation:  {pearson_corr:.4f}")
-    # print(f"Spearman Correlation: {spearman_corr:.4f}")
-    
-    # fig, axes = plt.subplots(1, 2, figsize=(15, 6))
-
-    # sns.regplot(x=y_true, y=preds, ax=axes[0], 
-    #             scatter_kws={'alpha':0.3, 's':10}, line_kws={'color':'red'})
-    # axes[0].set_title("Actual vs Predicted RR")
-    # axes[0].set_xlabel("Actual Log RR")
-    # axes[0].set_ylabel("Predicted Log RR")
-    # axes[1].plot(y_true[:300], label='Actual RR', alpha=0.7)
-    # axes[1].plot(preds[:300], label='Predicted RR', color='orange', linewidth=2)
-    # axes[1].set_title("Time-Series Comparison (Subset of S2)")
-    # axes[1].legend()
-    
-    # plt.tight_layout()
-    # plt.savefig(graph_pth)
-
 def plot_importance(model_obj, graph_pth):
     booster = model_obj.model.get_booster()
     importance = booster.get_score(importance_type='gain')
@@ -79,7 +51,6 @@ def plot_importance(model_obj, graph_pth):
     plt.savefig(graph_pth)
 
 def plot_sgu2_loss(history, save_path=None):
-    # 保持你原来的逻辑，但增加一个量纲提醒
     plt.figure(figsize=(10, 6))
     plt.plot(history['train_loss'], label='Train Loss (MSE)', color='blue')
     plt.plot(history['val_loss'], label='Val Loss (MSE)', color='red', linestyle='--')
@@ -92,9 +63,6 @@ def plot_sgu2_loss(history, save_path=None):
     plt.close()
 
 def evaluate_sgu1(model, X_val, y_val, graph_pth, is_xgb=True):
-    """
-    SGU1 评估：预测目标为 Realized Price Range (p_max - p_min)
-    """
     if is_xgb:
         preds = model.predict(X_val) 
     else:
@@ -131,14 +99,10 @@ def evaluate_sgu1(model, X_val, y_val, graph_pth, is_xgb=True):
     plt.close()
 
 def evaluate_sgu2(model, X_val, y_val, graph_pth):
-    """
-    SGU2 评估：预测目标为 Returns/Trend (m_i - m_{i-1})/m_{i-1}
-    """
     preds = model.predict(X_val).flatten()
     y_true = np.asarray(y_val).flatten()
 
     pearson_corr = np.corrcoef(preds, y_true)[0, 1]
-    spearman_corr, _ = spearmanr(preds, y_true)
     
     mse = np.mean((preds - y_true)**2)
     baseline_mse = np.mean((0 - y_true)**2)

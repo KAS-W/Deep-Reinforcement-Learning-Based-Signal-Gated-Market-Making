@@ -56,9 +56,6 @@ def pro_dataloader_sgu2(start, end, time_steps=10, event_step=19):
     return np.concatenate(X_list, axis=0), np.concatenate(y_list, axis=0)
 
 def pro_sgu2_pipeline(s1=(20240401, 20240420), s2=(20240421, 20240430), time_steps=10, event_step=19):
-    """
-    SGU2 训练流水线：整合 3D 标准化、标签缩放与复读机检测
-    """
     X_train, y_train = pro_dataloader_sgu2(start=s1[0], end=s1[1], time_steps=time_steps, event_step=event_step)
     X_val, y_val = pro_dataloader_sgu2(start=s2[0], end=s2[1], time_steps=time_steps, event_step=event_step)
 
@@ -82,23 +79,13 @@ def pro_sgu2_pipeline(s1=(20240401, 20240420), s2=(20240421, 20240430), time_ste
     
     lag_corr = np.corrcoef(val_preds[1:], y_val_flat[:-1])[0, 1]
 
-    print(f"\n" + "="*40)
-    print(f"DEBUG: Repeater Detection")
-    print(f"Current Correlation (t, t):     {current_corr:.4f}")
-    print(f"Lag-1 Correlation (t, t-1):    {lag_corr:.4f}")
-    if lag_corr > current_corr:
-        print("WARNING: Model is REPEATING the previous return!")
-    else:
-        print("PASSED: Model has learned some predictive trend.")
-    print("="*40 + "\n")
-
     img_dir = 'D:/UW/Course/2026 WINTER/522_trade_sys/replication/img/sgu2_graph'
     os.makedirs(img_dir, exist_ok=True)
     
-    evaluate_sgu2(model, X_val, y_val, os.path.join(img_dir, 'sgu2_val_final.png'))
-    plot_sgu2_loss(history, os.path.join(img_dir, 'sgu2_loss_final.png'))
+    evaluate_sgu2(model, X_val, y_val, os.path.join(img_dir, 'sgu2_val_sample.png'))
+    plot_sgu2_loss(history, os.path.join(img_dir, 'sgu2_loss_sample.png'))
 
-    save_path = f"checkpoints/paper_sgu2/sgu2_model_{s1[0]}_{s1[1]}.pth"
+    save_path = f"checkpoints/sample_sgu2/sgu2_model_{s1[0]}_{s1[1]}.pth"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     model.save(save_path)
     
@@ -108,8 +95,8 @@ def pro_sgu2_pipeline(s1=(20240401, 20240420), s2=(20240421, 20240430), time_ste
 if __name__ == '__main__':
     set_seed(114514)
     pro_sgu2_pipeline(
-        s1=(20240401, 20240427),
-        s2=(20240428, 20240503),
+        s1=(20240401, 20240510),
+        s2=(20240511, 20240520),
         time_steps=10, 
         event_step=19  
     )

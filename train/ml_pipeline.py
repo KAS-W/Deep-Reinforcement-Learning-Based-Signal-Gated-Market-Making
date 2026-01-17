@@ -3,7 +3,7 @@ import glob
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from utils.analyzer import evaluate_sgu1_comparison, plot_importance
+from utils.analyzer import evaluate_sgu1, plot_importance
 from models.HFTLoader import SGU1DataPro
 from models.sgu1 import SGU1
 
@@ -75,23 +75,23 @@ def pro_sgu1_pipeline(s1=(20240401, 20240512), s2=(20240513, 20240531), event_st
     print(f"Correlation: {val_corr:.4f}")
     print(f"RMSE:        {val_rmse:.6f}")
     print(f"MAPE:        {val_mape:.4f}")
-    os.makedirs('checkpoints/paper_xgb', exist_ok=True)
-    save_path = f"checkpoints/paper_xgb/sgu1_xgboost_{s1[0]}_{s1[1]}.json"
+    os.makedirs('checkpoints/sample_xgb', exist_ok=True)
+    save_path = f"checkpoints/sample_xgb/sgu1_xgboost_{s1[0]}_{s1[1]}.json"
     model.save(save_path)
     print(f"Model saved to: {save_path}")
 
     img_dir = 'D:/UW/Course/2026 WINTER/522_trade_sys/replication/img/sgu1_graph'
     os.makedirs(img_dir, exist_ok=True)
 
-    evaluate_sgu1_comparison(model, X_val, y_val, os.path.join(img_dir, 'sgu1_val_paper.png'))
-    plot_importance(model, os.path.join(img_dir, 'sgu1_importance_paper.png'))
+    evaluate_sgu1(model, X_val, y_val, os.path.join(img_dir, 'sgu1_val_sample.png'))
+    plot_importance(model, os.path.join(img_dir, 'sgu1_importance_sample.png'))
 
     return model, val_corr
 
 
 if __name__ == '__main__':
     sgu1_model, correlation = pro_sgu1_pipeline(
-        s1=(20240401, 20240420),
-        s2=(20240421, 20240430),
+        s1=(20240401, 20240510),
+        s2=(20240511, 20240520),
         event_step=19
     )
