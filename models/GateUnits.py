@@ -1,20 +1,63 @@
+import xgboost as xgb
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+class SGU1:
+    """XGBoost Model for Signal Gate Unit 1"""
+
+    def __init__(self, model_path=None):
+
+        self.params = {
+            'max_depth': 4,
+            'min_child_weight': 4,
+            'subsample': 1.0,
+            'colsample_bytree': 1.0,
+            'learning_rate': 0.01,
+            'reg_alpha': 0.01,
+            'objective': 'reg:squarederror',
+            'n_estimators': 1000,
+            'early_stopping_rounds': 20  
+        }
+        self.model = xgb.XGBRegressor(**self.params)
+        self.model_path = model_path
+
+    def train(self, X_train, y_train, X_val, y_val):
+        """Train the model and implement early stopping"""
+        self.model.fit(
+            X_train, y_train, eval_set=[(X_val, y_val)],
+            verbose=True
+        )
+
+    def predict(self, X):
+        return self.model.predict(X)
+    
+    def save(self, path):
+        self.model.save_model(path)
+
+    def load(self, path):
+        self.model.load_model(path)
+
 class SGU2Model(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(SGU2Model, self).__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.dropout = nn.Dropout(0.8)
         self.fc = nn.Linear(hidden_size, 1)
 
     def forward(self, x):
         # x shape: (batch, time_steps, input_size)
         out, _ = self.lstm(x)
-        return self.fc(out[:, -1, :])
+        last_out = out[:, -1, :]
+        last_out = self.dropout(last_out)
+        return self.fc(last_out)
 
 class SGU2:
+    """
+    LSTM model for SGU2
+    """
+
     def __init__(self, input_size=1, hidden_size=10, device='cpu'):
         self.device = torch.device(device)
         self.model = SGU2Model(input_size, hidden_size).to(self.device)
@@ -78,3 +121,12 @@ class SGU2:
 
     def save(self, path):
         torch.save(self.model.state_dict(), path)
+
+    def load(self, path):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # here must add weights_only=True for current torch version
+        # or there are will be long warning logs
+        state_dict = torch.load(path, map_location=device, weights_only=True)
+        self.model.load_state_dict(state_dict)
+        self.model.eval()
+        print(f"SGU2 model loaded from {path} and set to eval mode.")

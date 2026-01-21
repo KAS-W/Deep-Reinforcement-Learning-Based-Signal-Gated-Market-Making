@@ -1,7 +1,26 @@
 import pandas as pd
 import numpy as np
 import torch
-from utils.fast.calculator import ts_delay
+from torch import Tensor
+from numpy import ndarray
+from pandas import DataFrame, Series
+from typing import Union
+
+def ts_delay(x: Union[Tensor, ndarray, DataFrame, Series], k: int):
+    """
+    Standard delay operator used for return calculations: r_t,k = ln(p_t / p_t-k)
+    """
+    if isinstance(x, (DataFrame, Series)):
+        return x.shift(k)
+    elif isinstance(x, Tensor):
+        # Pad with NaNs to maintain length alignment
+        out = torch.full_like(x, float('nan'), dtype=torch.float32)
+        out[k:] = x[:-k]
+        return out
+    elif isinstance(x, ndarray):
+        out = np.full_like(x, np.nan)
+        out[k:] = x[:-k]
+        return out
 
 class HFTMarketBase:
     def __init__(self, snap_df: pd.DataFrame, tick_df: pd.DataFrame, device='cpu'):
@@ -38,16 +57,18 @@ class HFTMarketBase:
                               'v_buy_sum', 'v_sell_sum', 'vol_sum', 
                               'trade_count', 'vwap_num']
         
+        self.event_df['trade_time'] = self.event_df['trade_time'].astype('int64')
+        tick_stats['trade_time'] = tick_stats['trade_time'].astype('int64')
+        
         self.event_df = pd.merge_asof(self.event_df, tick_stats, on='trade_time', direction='backward')
 
         self.tick.drop(columns=['p_buy', 'p_sell', 'v_buy', 'v_sell', 'vwap_p'], inplace=True)
 
 class SGU1DataPro(HFTMarketBase):
-    def gen_dataset(self, delta_t=19):
-        delta_t = 19
+    def gen_dataset(self, event_step=19):
         periods = []
-        for i in range(0, len(self.event_df) - delta_t, delta_t):
-            group = self.event_df.iloc[i : i + delta_t]
+        for i in range(0, len(self.event_df) - event_step, event_step):
+            group = self.event_df.iloc[i : i + event_step]
             
             p_buy_max = group['p_buy_max'].max()
             p_sell_min = group['p_sell_min'].min()
@@ -65,8 +86,8 @@ class SGU1DataPro(HFTMarketBase):
 
             periods.append({
                 'label': round(label, 4),
-                'tr_count': group['trade_count'].sum(), #
-                'vwap': group['vwap_num'].sum() / (group['vol_sum'].sum() + 1e-9), #
+                'tr_count': group['trade_count'].sum(), 
+                'vwap': group['vwap_num'].sum() / (group['vol_sum'].sum() + 1e-9), 
                 'mid': (group['askprice1'].iloc[-1] + group['bidprice1'].iloc[-1]) / 2.0,
                 'vol_imb': (group['v_buy_sum'].sum() - group['v_sell_sum'].sum()) / (group['vol_sum'].sum() + 1e-9),
                 'spread': group['askprice1'].iloc[0] - group['bidprice1'].iloc[0],

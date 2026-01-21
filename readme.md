@@ -66,3 +66,13 @@ SGU1 (Signal Generation Unit 1) is designed to predict the future price realized
 | Week 3 | | | ✓ | ✓ | | |
 | Week 4 | | | | ✓ | ✓ | |
 | Week 5 | | | | | ✓ | ✓ |
+
+## DRL Automated Market-making Results
+
+In both the original paper and the replication of this project, the First-Passage Time (FPT) execution model is utilized for trade matching. Under this model, a limit order is executed immediately as soon as the market price touches or crosses the market maker's (MM) quoted price. The following figure illustrates the performance results from the paper, which assumes a scenario where no transaction fees are imposed on the MM:
+
+![mm_nofee](output/510300/phi_0.0001_S3_PURE_BLIND_TEST.png)
+
+The performance of the market-making strategy on the CSI 300 ETF, incorporating a transaction fee rate of 0.5 bps, is illustrated in the figure below:
+
+![mm_fee](output/510300/phi_0.0001_S3_TEST.png)
