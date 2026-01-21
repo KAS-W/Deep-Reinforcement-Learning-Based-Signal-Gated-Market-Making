@@ -21,5 +21,5 @@ def execute(symbol="688981", PHI=0.001, TICK_SIZE=0.01, fee_rate=0.0003, use_fee
 
 
 if __name__ == '__main__':
-    # execute(symbol='688981', PHI=0.005, TICK_SIZE=0.01, fee_rate=0.0, use_fee=False, use_arl=False)
-    execute(symbol='510300', PHI=0.0001, TICK_SIZE=0.001, fee_rate=0.00005, use_fee=False, use_arl=True)
+    execute(symbol='688981', PHI=0.01, TICK_SIZE=0.01, fee_rate=0.0003, use_fee=False, use_arl=False)
+    # execute(symbol='510300', PHI=0.0001, TICK_SIZE=0.001, fee_rate=0.00005, use_fee=False, use_arl=True)
