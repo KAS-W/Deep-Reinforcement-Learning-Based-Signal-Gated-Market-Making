@@ -73,6 +73,6 @@ In both the original paper and the replication of this project, the First-Passag
 
 ![mm_nofee](output/510300/phi_0.0001_S3_PURE_BLIND_TEST.png)
 
-The performance of the market-making strategy on the CSI 300 ETF, incorporating a transaction fee rate of 0.5 bps, is illustrated in the figure below:
+For adversarial environment training without fees on CSI 300 ETF, the agent (DRL2) shows stronger stability for adversal selections:
 
-![mm_fee](output/510300/phi_0.0001_S3_TEST.png)
+![mm_nofee_with_adv](output/510300/phi_0.0001_S3_TEST.png)
