@@ -76,9 +76,11 @@ def load_signals_bundle(symbol, date_list, m1, m2, scaler):
             np.concatenate(mids), np.concatenate(asks), np.concatenate(bids),
             np.concatenate(buy_maxs), np.concatenate(sell_mins))
 
-def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.01, fee_rate=0.00005, USE_FEE=False):
+def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.01, fee_rate=0.00005, USE_FEE=False, USE_ARL=True):
 
     checkpoint_dir = f"checkpoints/{symbol}"
+    if USE_FEE == False:
+        fee_rate = 0.0
 
     # Assets are locked based on the SGU training session
     m1 = SGU1()
@@ -127,7 +129,7 @@ def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.
     }
 
     # Training engine execution
-    engine = DRLEngine(pop_size=50, sigma=0.05, phi=PHI, tick_size=TICK_SIZE, save_dir=checkpoint_dir)
+    engine = DRLEngine(pop_size=50, sigma=0.05, phi=PHI, tick_size=TICK_SIZE, save_dir=checkpoint_dir, use_arl=USE_ARL)
     best_agent, _ = engine.train(train_bundle, val_bundle, train_stats, generations=100)
 
     # Blind Test on the last 15% of S3
@@ -143,14 +145,14 @@ def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.
             
             raw_act = best_agent.forward(n_s).squeeze().cpu().numpy()
             scaled_act = np.round(raw_act * 5).astype(int) 
-            reward, info = env.step(scaled_act, mid[t], ask[t], bid[t], buy_max[t], sell_min[t])
+            reward, info = env.step(scaled_act, mid[t], ask[t], bid[t], buy_max[t], sell_min[t], adv_action=None)
             recorder.record(t, mid[t], ask[t], bid[t], scaled_act, reward, env.inventory, env.cash, info)
 
     res_df = recorder.to_dataframe()
     metrics = StrategyAnalytics(res_df).summary_dict
     report_path = f"output/{symbol}/phi_{PHI}_S3_TEST.png"
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
-    BacktestVisualizer.plot_professional_report(res_df, metrics, save_path=report_path)
+    BacktestVisualizer.plot_professional_report(res_df, metrics, save_path=report_path, show_fees=USE_FEE)
     print(f">>> Complete. Report saved to: {report_path}")
 
 

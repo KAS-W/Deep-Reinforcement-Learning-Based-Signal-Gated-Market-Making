@@ -58,15 +58,16 @@ class StrategyAnalytics:
 class BacktestVisualizer:
     @staticmethod
     def plot_professional_report(df, metrics, save_path='report.png', show_fees=False):
-        n_subplots = 11 if show_fees else 10
-        fig, axes = plt.subplots(n_subplots, 1, figsize=(15, 4 * n_subplots), sharex=True)
+        n_base_plots = 10
+        n_rows = n_base_plots + (1 if show_fees else 0) + 1
+        fig, axes = plt.subplots(n_rows, 1, figsize=(16, 4 * n_rows))
 
         # 1. Mid Price
         axes[0].plot(df['step'], df['mid'], color='black', alpha=0.8, label='Mid Price')
         axes[0].set_title('Market Mid Price', fontweight='bold')
 
         # 2. PnL & Position
-        ax2_pnl = axes[1].plot(df['step'], df['wealth'], color='#1f77b4', marker='*', markersize=2, 
+        ax2_pnl = axes[1].plot(df['step'], df['wealth'], color='#1f77b4', marker='*', markersize=3, 
                                linewidth=1, alpha=0.7, label='Terminal Wealth')
         axes[1].set_title('Wealth & Inventory History', fontweight='bold')
         axes[1].set_ylabel('Wealth')
@@ -119,9 +120,9 @@ class BacktestVisualizer:
         if show_fees:
             
             ax_fee = axes[10]
-            ax_fee.plot(df['step'], df['cum_fees'], color='brown', label='Cumulative Fees Paid')
-            ax_fee.fill_between(df['step'], 0, df['cum_fees'], color='brown', alpha=0.1)
-            ax_fee.set_title("Transaction Cost Erosion (Cumulative Fees)")
+            ax_fee.plot(df['step'], -df['cum_fees'], color='brown', label='Total Fees')
+            ax_fee.fill_between(df['step'], 0, -df['cum_fees'], color='brown', alpha=0.1)
+            ax_fee.set_title("Transaction Cost Erosion")
             ax_fee.set_ylabel("Currency Unit")
             ax_fee.legend(loc='upper left')
             ax_fee.grid(True, alpha=0.3)

@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 
 class TradingPolicy(nn.Module):
-
+    """DRL Agent"""
     def __init__(self, state_dim=3, action_dim=2, hidden_dim=32):
         super(TradingPolicy, self).__init__()
         self.net = nn.Sequential(
@@ -35,6 +35,27 @@ class TradingPolicy(nn.Module):
             p.data.copy_(weights[current_idx:current_idx + numel].view(p.data.shape).to(p.device))
             current_idx += numel
 
+class AdversaryPolicy(nn.Module):
+    """Adversial DRL Agent"""
+    def __init__(self, input_size=3, hidden_size=12):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 2), # two noises：delta_a, delta_b
+            nn.Tanh()
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+    
+    def set_weights(self, weights):
+        current_idx = 0
+        for p in self.parameters():
+            numel = p.data.numel()
+            p.data.copy_(weights[current_idx:current_idx + numel].view(p.data.shape).to(p.device))
+            current_idx += numel
+    
 class NeuroEvolution:
     def __init__(self, population_size=50, sigma=0.05):
         self.pop_size = population_size
