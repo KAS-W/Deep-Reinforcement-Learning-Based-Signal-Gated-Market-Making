@@ -154,7 +154,7 @@ activemq-data/
 .env
 .envrc
 .venv
-env/
+# env/
 venv/
 # ENV/
 env.bak/
@@ -221,7 +221,7 @@ __marimo__/
 # confidential~
 **tusharesql.py
 **__init__.py
-**.ipynb
+# **.ipynb
 data/
 archive/
 deprecated/

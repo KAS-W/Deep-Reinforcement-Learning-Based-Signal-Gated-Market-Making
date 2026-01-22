@@ -129,7 +129,11 @@ def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.
     }
 
     # Training engine execution
-    engine = DRLEngine(pop_size=50, sigma=0.05, phi=PHI, tick_size=TICK_SIZE, save_dir=checkpoint_dir, use_arl=USE_ARL)
+    if USE_ARL:
+        agent_path = f"checkpoints/{symbol}/with_adv"
+    else:
+        agent_path = f"checkpoints/{symbol}/without_adv"
+    engine = DRLEngine(pop_size=50, sigma=0.05, phi=PHI, tick_size=TICK_SIZE, save_dir=agent_path, use_arl=USE_ARL)
     best_agent, _ = engine.train(train_bundle, val_bundle, train_stats, generations=100)
 
     # Blind Test on the last 15% of S3
