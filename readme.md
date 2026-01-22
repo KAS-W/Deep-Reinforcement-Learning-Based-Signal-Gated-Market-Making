@@ -11,7 +11,7 @@ This framework transforms intraday volatility and trend dynamics into execution 
 
 **Data**
 
-A-share Limit Order Book (LOB) data for liquid constituents: 300ETF (Tushare code `510300.SH`) from `Tushare`. Leveraging multiple years of historical data to satisfy the sample density requirements for neuroevolutionary training.
+A-share Limit Order Book (LOB) data for liquid constituents: 300ETF (`510300.SH`). Leveraging multiple years of historical data to satisfy the sample density requirements for neuroevolutionary training.
 
 Period: 20240401-20240630
 
@@ -22,7 +22,7 @@ Period: 20240401-20240630
 3. **Policy Evolution**: Train deep neural networks using population-based Genetic Algorithms (Neuroevolution) to map intraday states directly to bid/ask offsets.
 4. **Adversarial Co-training**: Evolve an adversary agent to stress-test the market maker's robustness against strategic quote displacement and model uncertainty.
 
-**SGU1 Features**
+<!-- **SGU1 Features**
 
 SGU1 (Signal Generation Unit 1) is designed to predict the future price realized range $RR_{t,k}$ using an XGBoost model. It incorporates 23 initial features derived from market microstructure and domain knowledge to capture various dimensions of price action and liquidity.
 
@@ -55,7 +55,21 @@ SGU1 (Signal Generation Unit 1) is designed to predict the future price realized
 - **Order Flow Statistics**: Includes total traded volume, percentage of upticks, and the count of large buys/sells. Note that experimental results suggested removing upticks and large order counts to improve gain.
 
 - **Time-Lagged Labels**: The previous modified realized price ranges ($RR$) used to capture volatility clustering.
-  $$RR_{t-L}, \quad L \in \{1, 2, 3, 4, 5\}$$
+  $$RR_{t-L}, \quad L \in \{1, 2, 3, 4, 5\}$$ -->
+
+## Workflow Introduction
+
+Ensure you have a Python environment (3.10+ recommended). Install the required dependencies using pip:
+
+`pip install -r requirements.txt`
+
+To train the signal units and the trading agent, run the following command from the root directory:
+
+`python -m main.py`
+
+- Run Backtests: Use` model_test.ipynb` to execute OOS backtests for ARL, DRL, and benchmarks like GLFT and FOIC.
+
+- Hypothesis Testing: Use `model_visualization.ipynb` to perform the four statistical validations (H1-H4), including Diebold-Mariano and Durbin-Watson tests.
 
 ## Replication Timeline
 
@@ -66,6 +80,7 @@ SGU1 (Signal Generation Unit 1) is designed to predict the future price realized
 | Week 3 | | | ✓ | ✓ | | |
 | Week 4 | | | | ✓ | ✓ | |
 | Week 5 | | | | | ✓ | ✓ |
+
 
 ## DRL Automated Market-making Results
 

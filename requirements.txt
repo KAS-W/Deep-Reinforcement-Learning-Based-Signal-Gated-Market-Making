@@ -1,0 +1,10 @@
+matplotlib==3.10.8
+numpy==2.4.1
+pandas==3.0.0
+py7zr==1.1.0
+scikit_learn==1.8.0
+seaborn==0.13.2
+torch==2.5.1+cu121
+tqdm==4.67.1
+tushare==1.4.24
+xgboost==3.1.3
