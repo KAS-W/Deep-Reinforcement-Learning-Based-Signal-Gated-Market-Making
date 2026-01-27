@@ -27,7 +27,7 @@ class SGU1:
         """Train the model and implement early stopping"""
         self.model.fit(
             X_train, y_train, eval_set=[(X_val, y_val)],
-            verbose=True
+            verbose=False
         )
 
     def predict(self, X):

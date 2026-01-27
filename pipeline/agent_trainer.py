@@ -76,7 +76,7 @@ def load_signals_bundle(symbol, date_list, m1, m2, scaler):
             np.concatenate(mids), np.concatenate(asks), np.concatenate(bids),
             np.concatenate(buy_maxs), np.concatenate(sell_mins))
 
-def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.01, fee_rate=0.00005, USE_FEE=False, USE_ARL=True):
+def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.01, fee_rate=0.00005, USE_FEE=False, USE_ARL=True, nb_mode=False):
 
     checkpoint_dir = f"checkpoints/{symbol}"
     if USE_FEE == False:
@@ -156,8 +156,8 @@ def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.
     metrics = StrategyAnalytics(res_df).summary_dict
     report_path = f"output/{symbol}/phi_{PHI}_S3_TEST.png"
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
-    BacktestVisualizer.plot_professional_report(res_df, metrics, save_path=report_path, show_fees=USE_FEE)
-    print(f">>> Complete. Report saved to: {report_path}")
+    BacktestVisualizer.plot_professional_report(res_df, metrics, save_path=report_path, show_fees=USE_FEE, nb_mode=nb_mode)
+    # print(f">>> Complete. Report saved to: {report_path}")
 
 
 # if __name__ == '__main__':

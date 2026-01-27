@@ -222,6 +222,8 @@ __marimo__/
 **tusharesql.py
 **__init__.py
 # **.ipynb
+model_test.ipynb
+model_visualization.ipynb
 data/
 archive/
 deprecated/

@@ -85,7 +85,8 @@ def run_sgu_training(symbol, train_range, val_range, event_step=19, time_steps=1
         mse = np.mean((preds - s1_y_val)**2)
 
         m1.save(os.path.join(checkpoint_dir, f"sgu1_{train_range[0]}_{train_range[1]}.json"))
-        print(f"[SGU1] Validation -> Corr: {corr:.4f} | MSE: {mse:.6f}")
+        # print(f"[SGU1] Validation -> Corr: {corr:.4f} | MSE: {mse:.6f}")
+        print(f"[SGU1] Validation -> Corr: {corr:.4f}")
 
     # training lstm for sgu2
     if s2_x_train is not None:
@@ -102,7 +103,8 @@ def run_sgu_training(symbol, train_range, val_range, event_step=19, time_steps=1
         mse = np.mean((preds - y_true)**2)
 
         m2.save(os.path.join(checkpoint_dir, f"sgu2_{train_range[0]}_{train_range[1]}.pth"))
-        print(f"[SGU2] Validation -> Corr: {corr:.4f} | MSE: {mse:.6f}")
+        # print(f"[SGU2] Validation -> Corr: {corr:.4f} | MSE: {mse:.6f}")
+        print(f"[SGU2] Validation -> Corr: {corr:.4f}")
 
         # save scaler on training set for validation and testing
         scaler_path = os.path.join(checkpoint_dir, f"sgu2_scaler_{train_range[0]}_{train_range[1]}.pkl")

@@ -57,7 +57,7 @@ class StrategyAnalytics:
     
 class BacktestVisualizer:
     @staticmethod
-    def plot_professional_report(df, metrics, save_path='report.png', show_fees=False):
+    def plot_professional_report(df, metrics, save_path='report.png', show_fees=False, nb_mode=False):
         n_base_plots = 10
         n_rows = n_base_plots + (1 if show_fees else 0) + 1
         fig, axes = plt.subplots(n_rows, 1, figsize=(16, 4 * n_rows))
@@ -142,5 +142,8 @@ class BacktestVisualizer:
             ax.set_xlabel('Environmental Step')
 
         plt.tight_layout()
-        plt.savefig(save_path, dpi=150)
-        plt.close()
+        if nb_mode:
+            plt.show()
+        else:
+            plt.savefig(save_path, dpi=150)
+            plt.close()
