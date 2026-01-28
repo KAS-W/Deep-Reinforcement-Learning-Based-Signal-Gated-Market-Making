@@ -1,0 +1,220 @@
+\documentclass[a4paper]{article}
+
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage[title]{appendix}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage[round]{natbib} 
+\bibliographystyle{plainnat} % 设置参考文献列表样式
+\usepackage{graphicx}
+\usepackage{soul}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{pythonhighlight}
+\usepackage[colorlinks, linkcolor=black, anchorcolor=black, citecolor=black]{hyperref}
+
+\title{Replication Report: Market Making With Signals
+Through Deep Reinforcement Learning}
+\author{Jiaxing Wei \\ \texttt{jwei2002@uw.edu}}
+\date{January 27, 2026}
+
+\begin{document}
+\maketitle
+
+\section{Paper Summary}
+The project involves replicating the paper Market Making With Signals Through Deep Reinforcement Learning \citep{gasperov2021market}. Our DRL framework is designed to overcome the classical limitations of stochastic control models, most notably the Avellaneda-Stoikov framework \citep{avellaneda2008high}. Unlike static approaches, the integration of Signal Generating Units (SGUs) allows for dynamic adaptation to market micro-structures. The core innovation lies in the integration of standalone Signal Generating Units (SGUs) that provide high-frequency alpha predictions specific price range and trend forecasts into the RL state space. The goal is to develop an agent that adaptively manages the bid-ask spread to maximize terminal wealth while significantly reducing inventory risk in volatile markets.
+
+\section{Literature Review}
+The problem of optimal Market Making (MM) is fundamentally a challenge of stochastic inventory control. The objective is to simultaneously quote bid and ask prices to capture the spread while managing the risk of holding a non-zero inventory.
+
+\subsection{Foundational Models and Reinforcement Learning}
+Traditional market-making models, such as the seminal Avellaneda-Stoikov framework \citep{avellaneda2008high}, rely on solving Hamilton-Jacobi-Bellman (HJB) equations under strict stochastic assumptions. However, these models often struggle with the non-linearities and high-dimensional state spaces of real-world Limit Order Books (LOBs). 
+
+Consequently, recent literature has shifted toward Reinforcement Learning (RL) to learn optimal policies directly from data. \citet{spooner2018market} pioneered the use of temporal-difference learning (Sarsa) with tile coding. They focused on the importance of the reward function, demonstrating that purely symmetric PnL-based rewards lead to sub-optimal inventory management. This work established the baseline for using asymmetric risk aversion to control inventory skew.
+
+\subsection{DRL and LOB Feature Extraction}
+With the advent of Deep RL (DRL), researchers began utilizing neural networks to process high-dimensional LOB data without manual feature engineering. \citet{sadighian2019deep} advanced this domain by implementing Advantage Actor-Critic (A2C) and Proximal Policy Optimization (PPO) algorithms. This study highlighted the effectiveness of Recurrent Neural Networks (RNNs) in capturing the temporal dependencies of order flow, particularly in volatile cryptocurrency markets. 
+
+Furthermore, \citet{guo2020market} introduced the Attn-LOB architecture. By employing attention mechanisms, they demonstrated that an agent could selectively focus on the most informative levels of the LOB, significantly outperforming traditional CNN-based feature extractors.
+
+\subsection{Adversarial Robustness and Training Stability}
+A recurring issue in DRL for market making is the sim-to-real gap and the tendency of agents to overfit to specific market regimes. \citet{spooner2020robust} addressed this by framing the MM problem as a zero-sum game between the market maker and an adversarial disturber. This adversarial framework forces the agent to learn robust policies that remain profitable even under unfavorable price movements. 
+
+\citet{gasperov2021market} build upon this adversarial foundation but introduce a critical innovation: Signal Generating Units (SGUs). Unlike previous end-to-end models, they decouple the prediction of market volatility (via XGBoost) and trend (via LSTM) from the RL decision-making process. Furthermore, they utilize Neuroevolution instead of gradient descent to avoid the instability inherent in noisy financial gradients.
+
+\section{Replication Framework}
+\subsection{Data Source}
+This paper utilizes tick-by-tick transaction data and 3-second snapshot data from the CSI 300 ETF to construct all deep learning features and to perform agent-based backtesting simulations.The data is sourced directly from the Shanghai Stock Exchange (SSE), encompassing transaction records from both the pre-market call auction and the continuous auction phases. During the pre-processing stage, tick-by-tick data is aggregated chronologically into the snapshots to reconstruct the LOB, which serves as the primary input for the SGU1 and SGU2 modules. In the original study, the authors defined a single event step as 19 consecutive changes in the Level 1 Limit Order Book (LOB). This methodology aims to eliminate the high noise and sparse distribution associated with fixed physical-time sampling. By adopting event-time sampling, the information density of the dataset is significantly enhanced in Figure \ref{fig:samp}. This paper strictly adheres to this configuration.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{samp.png}
+    \caption{Time Bar \& Event Bar Sampling}
+    \label{fig:samp}
+\end{figure}
+
+\subsection{CSI 300 ETF Microstructure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{midp.png}
+    \caption{Mid-price of CSI 300 ETF}
+    \label{fig:midp}
+\end{figure}
+
+\noindent The mid-price of the CSI 300 ETF exhibits intraday fluctuations of approximately 30 ticks, reflecting its substantial market depth and exceptional liquidity. As illustrated in the figure, the price dynamics demonstrate significant clustering effects alongside occasional large discrete jumps. These phenomena suggest that even in an environment with exceptional liquidity, the LOB can still be instantaneously depleted by large-scale transactions or informed trading, resulting in transient liquidity voids. Such conditions provide an ideal testbed for assessing whether a DRL market maker can leverage deep learning-derived features to reinforce its order-skewing mechanisms, thereby enhancing its ability to mitigate adverse selection risks.\\
+
+
+\noindent This specific LOB in Figure \ref{fig:l5} characterized by scant liquidity at the BBO followed by a concentrated volume at Level 2 indicates a fragile touch with a secondary defense line. The decreasing volume from Level 2 to Level 5 reflects a liquidity clustering effect just outside the spread. A robust agent should interpret the Level 2 Wall as a pivot for order skewing, effectively withdrawing from the fragile Level 1 to avoid adverse selection while utilizing the depth at Level 2 to neutralize inventory risk.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{l5.png}
+    \caption{Snapshot of LOB with 5-Level Depth}
+    \label{fig:l5}
+\end{figure}
+
+\subsection{Agent Setup}
+\begin{itemize}
+    \item \textbf{State Space \& Signal Integration}: The state space $S_t = [I_t, RR_t, TR_t]$ is three-dimensional, consisting of the agent’s current inventory (It) and two predictive signals: the modified realized price range (RRt) and the price trend (T Rt). Unlike traditional models, it intentionally excludes time remaining to suit continuous trading environments. These signals serve as gating mechanisms, enabling the agent to adjust its quoting strategy in response to market volatility and momentum forecasts.
+    \item \textbf{Action Space \& Continuous Offsets}: The framework utilizes a two-dimensional, continuous action space $A_t = [A_{t,1}, A_{t,2}]$. These actions represent bid and ask offsets relative to the current best bid/ask prices, rather than absolute prices. This formulation ensures the quoting is tick-based and inherently accounts for the prevailing market spread, facilitating both aggressive (inside-spread) and conservative quoting.
+    \item \textbf{Reward Shaping \& Risk Control}: The reward function $R_{t+1}$ balances captured spreads with an absolute inventory penalty: $\lambda|I_{t+1}|$. This linear penalty, inspired by Value-at-Risk (VaR) interpretations, discourages large directional exposures. The reward is designed to disincentivize trend-chasing and focus the agent on round-trip spread capturing, which is crucial for maintaining market neutrality.
+    \item \textbf{Neuroevolution \& Adversarial Training}: To avoid the noisy gradient problem common in financial RL, the paper employs neuroevolution via genetic algorithms to optimize the policy. Furthermore, it introduces Adversarial Reinforcement Learning (ARL), where an adversary agent strategically perturbs the market maker’s quotes. This minimax optimization approach enhances the model’s robustness against model misspecification and changing market regimes.
+\end{itemize}
+
+
+\section{Hypothesis Tests}
+
+ Following the criteria for a rigorous, systematic trading hypothesis, this section defines the statistical tests designed to validate the Signal-Gated DRL framework on the 510300 ETF. Given the high-frequency nature of the data, which typically exhibits fat tails and serial correlation, we move beyond simple $t$-tests to incorporate robust econometric evaluations.
+
+\subsection{H1: Predictive Efficacy of SGUs}
+\noindent We verified the predictive power of SGU2 (LSTM) for price direction using the Diebold-Mariano (DM) test against a naive driftless forecast.
+
+\begin{itemize}
+    \item \textbf{DM Statistic}: 20.9560
+    \item \textbf{$p$-value}: 0.0000
+    \item \textbf{Conclusion}: The null hypothesis of equal forecast accuracy is rejected ($p < 0.05$). The SGUs provide significantly better market environment predictions than random drift.
+\end{itemize}
+
+\subsection{H2: Execution Intensity and Microstructure Facts}
+\noindent The Durbin-Watson (DW) test was applied to the execution rewards to detect serial correlation, which indicates the model's ability to capture persistent microstructure dependencies.
+\begin{itemize}
+    \item \textbf{DW-Stat}: 1.2835
+    \item \textbf{Conclusion}: The value is significantly lower than 2, indicating positive first-order autocorrelation. This confirms that execution intensity is not a purely static exponential decay but is influenced by persistent LOB dynamics.
+\end{itemize}
+
+\subsection{H3: Comparative Superiority}
+Using Moving Block Bootstrapping (MBB) with 500 samples, we calculated the 95\% confidence intervals (CI) for the per-step Sharpe Ratio.
+
+\begin{table}[H]
+\centering
+\caption{Comparative Performance Statistics (Per-Step)}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{Mean Sharpe} & \textbf{95\% Confidence Interval} & \textbf{Total Fills} \\
+\midrule
+ARL (Adversarial) & 0.3981 & $[0.0000, 0.6887]$ & 1540 \\
+DRL (Standard)    & 0.5405 & $[0.1852, 0.7805]$ & 1658 \\
+FOIC (Benchmark)  & 0.4278 & $[0.1717, 0.6201]$ & 1821 \\
+GLFT (Analytical) & 0.4167 & $[0.1576, 0.6156]$ & 1825 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent The empirical results reveal a nuanced trade-off between standard and adversarial training. While the DRL agent achieved a higher mean per-step Sharpe ratio ($0.5405$), reflecting its ability to maximize expected rewards under observed market distributions, the ARL agent exhibited a more conservative profile with a lower Max DD. This aligns with the expectation that adversarial training sacrifices some absolute profit in exchange for robustness against worst-case market drift—a critical trait for surviving the liquidity cliff effects near price limits in the ETF market.
+
+\subsection{H4: Economic Rationality of Policy Skewing}
+We analyzed the relationship between the inventory level ($I_t$) and the price skew:
+$$
+\text{skew}=\text{off}_{bid} - \text{off}_{ask}
+$$
+\begin{itemize}
+    \item \textbf{Observation}: Regression plot \ref{fig:inv_skew} shows a significant positive slope for both the ARL and DRL policies.
+    \item \textbf{Conclusion}: As inventory increases, the agent increases the bid offset and decreases the ask offset (increasing the skew). This proves the agent has learned \textbf{economic rationality}: it skews quotes to encourage sells and discourage buys when holding a long position, thereby mitigating directional risk.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{skew_inv.png}
+    \caption{Relationship between MM's Inventory to Skewing}
+    \label{fig:inv_skew}
+\end{figure}
+
+\section{Key Findings and Discussion}
+In the original paper, the authors defined Mean Absolute Position (MAP) to quantify the agent's inventory risk, and introduced the Rolling PnL-to-MAP Ratio (PnLMAP) to evaluate the agent's profitability derived from optimizing quotes via skewed orders, rather than holding positions against the market:
+
+$$\text{MAP}(t)=\frac{1}{M}\sum_{k=1}^M|I_{k\Delta_t}|, \quad \text{PnLMAP}(t)=\frac{W_t}{\text{MAP}(t)}$$
+
+\noindent As illustrated in Figure \ref{fig:map}, the agent without adversarial training achieves the superior PnL-to-MAP ratio on the CSI300 ETF. This indicates that the inputs from SGU1 and SGU2 enhance the agent’s ability to predict volatility clustering and price trends. Consequently, the agent optimizes its quotes in advance based on order book dynamics more effectively than other benchmarks, thereby minimizing inventory risk. Contrary to the results obtained on BTCUSDT in the original paper, the agent trained with adversarial reinforcement learning (ARL) failed to outperform the basic fixed-offset quoting strategy in terms of quote optimization. This discrepancy highlights the vulnerability of the DRL architecture in the A-share market. When confronted with spoofing and toxic orders, the market-making agent's requirements for directional prediction accuracy become significantly more stringent.\\
+
+
+\noindent Notably, the results presented in Figure \ref{fig:inv_skew} corroborate the findings in Figure \ref{fig:map}: the DRL agent demonstrates more agile order skewing in response to fluctuations in inventory levels compared to its ARL counterpart. This suggests that the ARL agent’s ability to induce fills after being impacted by informed traders is weakened, leading to a rapid escalation in directional risk exposure.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{map2pnl.png}
+    \caption{MAP to PnL comparison of DRL and benchmarks}
+    \label{fig:map}
+\end{figure}
+
+\noindent As illustrated in Figures \ref{fig:drl} and \ref{fig:arl}, during the out-of-sample (OOS) backtesting, both the DRL and ARL agents yielded a cumulative PnL of approximately 0.65 over an investment horizon of 1,000 decision steps. However, their risk-adjusted performances diverged significantly: the DRL agent achieved a step-wise Sharpe ratio of 0.66, whereas the ARL agent only reached 0.44. Notably, the Mean Absolute Position (MAP) of the ARL agent was 61\%, more than double the 28\% observed for the DRL agent. This disparity suggests that under the disturbance of informed trading, the ARL agent is more susceptible to adverse selection, where its passive quotes are frequently executed by informed counterparties. Consequently, the agent is forced to prolong its holding duration to manage the resulting inventory skew, leading to heightened exposure to directional risk.
+
+\begin{figure}[H] % [H] 强制固定在当前位置
+    \centering
+    % 第一张图
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{drl.png}
+        \caption{DRL OOS Backtest}
+        \label{fig:drl}
+    \end{minipage}
+    % 注意：这里不要留空行，直接紧跟第二个 minipage
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{arl.png}
+        \caption{ARL OOS Backtest}
+        \label{fig:arl}
+    \end{minipage}
+\end{figure}
+
+\noindent As demonstrated in Figures \ref{fig:drlskew} and \ref{fig:arlskew}, the agents adopt a more conservative skewing strategy to mitigate inventory penalties following instances of adverse selection. This behavioral shift is characterized by a reluctance to place orders at significant distances from the Best Bid and Offer (BBO).
+
+\begin{figure}[H] % [H] 强制固定在当前位置
+    \centering
+    % 第一张图
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{drlskew.png}
+        \caption{DRL Orders Skew}
+        \label{fig:drlskew}
+    \end{minipage}
+    % 注意：这里不要留空行，直接紧跟第二个 minipage
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{arlskew.png}
+        \caption{ARL Orders Skew}
+        \label{fig:arlskew}
+    \end{minipage}
+\end{figure}
+
+\section{Extensional Analysis}
+\subsection{Fee Rate Examination}
+In this section, the total transaction costs for the CSI 300 ETF are set at 0.3 basis points (bps) per trade. In contrast to the zero-fee environment typically granted to Designated Market Makers in the A-share market, this parameterization simulates scenarios where the market maker achieves immediate execution but at the cost of adverse fill prices. The policy analysis in Figure \ref{fig:drlfee} reveals how market-making profits are constrained by subtle transaction costs, leading to a shift in decision-making logic. Specifically, the agent opts to reduce its trade frequency by approximately 30 fills to avoid the cumulative erosion caused by high-frequency friction. As a result, the agent suppresses its skewing intensity and prefers to anchor its orders at the BBO. Even so, in the absence of informed trader interference, the agent still chooses to place orders at price levels that prioritize execution probability, ensuring that inventory skews are neutralized quickly enough to justify the fixed transaction costs.
+
+\subsection{Future Improvements}
+For further research, the First Traversed Price (FTP) mechanism could be replaced with queue-position-based matching to further validate the agent’s profitability in live production environments. Additionally, selecting highly volatile assets—such as small-cap cryptocurrencies or options—would provide a more rigorous test of the DRL system’s ability to perform order skewing in markets characterized by shallow liquidity and rapid order book dynamics. 
+
+\section{Conclusion}
+This paper evaluates the application of the DRL framework on the CSI 300 ETF during the first half of 2024, demonstrating its partial cross-market transferability. The deep learning modules introduced in the original study provide forecasts for short-term volatility and price trends, which enhance the agent's risk-aversion capabilities in the CSI 300 ETF market. This enables the agent to pre-emptively skew orders before actual shifts occur in the LOB, thereby mitigating the risk of adverse selection. However, when confronted with informed traders or homogeneous strategies, the agent's skewing behavior rapidly turns conservative, exhibiting weaker robustness compared to the results obtained on BTCUSDT in the original paper.
+
+\clearpage
+\bibliography{ref}
+
+\clearpage
+\input{appendix.tex}
+
+\end{document}
