@@ -153,6 +153,11 @@ def run_agent_training_pipeline(symbol, sgu_train_range, PHI=0.001, TICK_SIZE=0.
             recorder.record(t, mid[t], ask[t], bid[t], scaled_act, reward, env.inventory, env.cash, info)
 
     res_df = recorder.to_dataframe()
+    # save step records to csv
+    csv_path = f"output/{symbol}/phi_{PHI}_S3_TEST_results.csv"
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    res_df.to_csv(csv_path, index=False)
+
     metrics = StrategyAnalytics(res_df).summary_dict
     report_path = f"output/{symbol}/phi_{PHI}_S3_TEST.png"
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
